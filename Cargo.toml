@@ -46,3 +46,6 @@ hex = "0.4"
 
 # Environment variables
 dotenv = "0.15"
+
+# Lightning Network
+lnbits-rs = "0.3.1"

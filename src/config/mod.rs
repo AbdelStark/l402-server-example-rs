@@ -31,11 +31,19 @@ pub struct Config {
     pub redis_url: String,
     /// Whether Lightning payments are enabled
     pub lightning_enabled: bool,
-    /// Lightning node REST endpoint (if applicable)
+    /// LNBits URL (if using LNBits)
+    pub lnbits_url: Option<String>,
+    /// LNBits admin key (if using LNBits)
+    pub lnbits_admin_key: Option<String>,
+    /// LNBits invoice read key (if using LNBits)
+    pub lnbits_invoice_read_key: Option<String>,
+    /// LNBits webhook verification key (if using LNBits)
+    pub lnbits_webhook_key: Option<String>,
+    /// Legacy: Lightning node REST endpoint (if applicable)
     pub lnd_rest_endpoint: Option<String>,
-    /// LND macaroon in hex format (if applicable)
+    /// Legacy: LND macaroon in hex format (if applicable)
     pub lnd_macaroon_hex: Option<String>,
-    /// Path to LND TLS certificate (if applicable)
+    /// Legacy: Path to LND TLS certificate (if applicable)
     pub lnd_cert_path: Option<String>,
     /// Whether Coinbase payments are enabled
     pub coinbase_enabled: bool,
@@ -94,6 +102,13 @@ impl Config {
             .parse()
             .unwrap_or(true);
 
+        // LNBits configuration
+        let lnbits_url = env::var("LNBITS_URL").ok();
+        let lnbits_admin_key = env::var("LNBITS_ADMIN_KEY").ok();
+        let lnbits_invoice_read_key = env::var("LNBITS_INVOICE_READ_KEY").ok();
+        let lnbits_webhook_key = env::var("LNBITS_WEBHOOK_KEY").ok();
+        
+        // Legacy LND configuration - kept for backward compatibility
         let lnd_rest_endpoint = env::var("LND_REST_ENDPOINT").ok();
         let lnd_macaroon_hex = env::var("LND_MACAROON_HEX").ok();
         let lnd_cert_path = env::var("LND_CERT_PATH").ok();
@@ -111,6 +126,10 @@ impl Config {
             port,
             redis_url,
             lightning_enabled,
+            lnbits_url,
+            lnbits_admin_key,
+            lnbits_invoice_read_key,
+            lnbits_webhook_key,
             lnd_rest_endpoint,
             lnd_macaroon_hex,
             lnd_cert_path,

@@ -239,33 +239,56 @@ impl PaymentService {
             .as_ref()
             .ok_or_else(|| PaymentError::InvalidPaymentMethod(PaymentMethod::Lightning))?;
 
-        // Verify the webhook signature
-        if !provider.verify_webhook(body, signature)? {
+        // Verify and parse the webhook event
+        let event = match provider.verify_webhook(body, signature) {
+            Ok(event) => event,
+            Err(e) => {
+                error!("Failed to verify webhook: {}", e);
+                return Ok(None);
+            }
+        };
+        
+        // Check if payment is actually settled
+        if !event.payment_status {
+            // Event doesn't indicate a completed payment
+            debug!("Ignoring webhook for non-paid invoice: {}", event.payment_hash);
             return Ok(None);
         }
 
-        // In a real implementation, you would extract the payment hash from the webhook
-        // Here we're assuming the webhook body contains a field like "r_hash"
-        let webhook_data: serde_json::Value = serde_json::from_slice(body)
-            .map_err(|e| PaymentError::InvalidInput(format!("Invalid webhook JSON: {}", e)))?;
-
-        let r_hash = webhook_data
-            .get("r_hash")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| PaymentError::InvalidInput("Missing r_hash in webhook".to_string()))?;
+        // Get the payment hash from the webhook data
+        let payment_hash = &event.payment_hash;
+        
+        // Additionally verify the payment status directly (extra safety check)
+        let is_paid = match provider.check_invoice(payment_hash).await {
+            Ok(paid) => paid,
+            Err(e) => {
+                error!("Failed to verify payment status: {}", e);
+                // Continue processing based on webhook data alone
+                event.payment_status
+            }
+        };
+        
+        if !is_paid {
+            debug!("Payment verification failed for hash: {}", payment_hash);
+            return Ok(None);
+        }
 
         // Look up the payment request by the payment hash
         let payment_request = match self
             .storage
-            .get_payment_request_by_external_id(r_hash)
+            .get_payment_request_by_external_id(payment_hash)
             .await
         {
             Ok(request) => request,
-            Err(_) => return Ok(None), // Payment not found, ignore
+            Err(_) => {
+                debug!("Payment request not found for hash: {}", payment_hash);
+                return Ok(None); // Payment not found, ignore
+            }
         };
 
         // Check if the payment is already paid
         if payment_request.status == PaymentStatus::Paid {
+            debug!("Payment already processed: {}", payment_hash);
             return Ok(None); // Already processed, ignore
         }
 

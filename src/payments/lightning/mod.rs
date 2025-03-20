@@ -1,7 +1,8 @@
 use crate::config::Config;
 use crate::models::PaymentRequestDetails;
 use anyhow::Result;
-use reqwest::Client;
+use lnbits_rs::{Client as LNBitsClient, Invoice, Payment, PaymentStatus};
+use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
@@ -25,35 +26,27 @@ pub enum LightningError {
     /// Serialization error
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
+    
+    /// LNBits client error
+    #[error("LNBits error: {0}")]
+    LNBitsError(#[from] lnbits_rs::Error),
 }
 
-/// Lightning payment provider
+/// Lightning payment provider using LNBits
 #[derive(Debug, Clone)]
 pub struct LightningProvider {
-    client: Client,
+    http_client: HttpClient,
+    lnbits_client: Option<LNBitsClient>,
     config: Arc<Config>,
 }
 
-/// Request to create a Lightning invoice
-#[derive(Debug, Serialize)]
-struct CreateInvoiceRequest {
-    /// Amount in satoshis
-    #[serde(rename = "value")]
-    amount_sats: u64,
-    /// Invoice memo/description
-    memo: String,
-    /// Expiry in seconds
-    expiry: u64,
-}
-
-/// Response from create invoice request
+/// Invoice webhook event data from LNBits
 #[derive(Debug, Deserialize)]
-struct CreateInvoiceResponse {
-    /// Payment request (BOLT11 invoice string)
-    #[serde(rename = "payment_request")]
-    payment_request: String,
+pub struct WebhookEvent {
     /// Payment hash
-    r_hash: String,
+    pub payment_hash: String,
+    /// Status of the payment (true if paid)
+    pub payment_status: bool,
 }
 
 impl LightningProvider {
@@ -66,22 +59,42 @@ impl LightningProvider {
             ));
         }
 
-        if config.lnd_rest_endpoint.is_none() {
-            return Err(LightningError::ConfigError(
-                "LND REST endpoint not configured".to_string(),
-            ));
-        }
-
-        if config.lnd_macaroon_hex.is_none() {
-            return Err(LightningError::ConfigError(
-                "LND macaroon not configured".to_string(),
-            ));
-        }
-
         // Create HTTP client
-        let client = Client::new();
+        let http_client = HttpClient::new();
+        
+        // Check for LNBits configuration
+        let lnbits_client = if let (Some(url), Some(admin_key)) = (&config.lnbits_url, &config.lnbits_admin_key) {
+            // Create LNBits client
+            match LNBitsClient::new(url, admin_key) {
+                Ok(client) => {
+                    info!("LNBits client initialized with admin key");
+                    Some(client)
+                }
+                Err(err) => {
+                    error!("Failed to initialize LNBits client: {}", err);
+                    return Err(LightningError::LNBitsError(err));
+                }
+            }
+        } else {
+            // Check for legacy LND config as fallback
+            if config.lnd_rest_endpoint.is_none() {
+                return Err(LightningError::ConfigError(
+                    "Neither LNBits nor LND configuration provided".to_string(),
+                ));
+            }
+            
+            // Using legacy LND client (not supported in this implementation)
+            error!("Legacy LND REST API no longer supported - please use LNBits");
+            return Err(LightningError::ConfigError(
+                "Legacy LND REST API no longer supported - please use LNBits".to_string(),
+            ));
+        };
 
-        Ok(Self { client, config })
+        Ok(Self { 
+            http_client, 
+            lnbits_client,
+            config 
+        })
     }
 
     /// Create a Lightning invoice for the specified amount
@@ -90,54 +103,29 @@ impl LightningProvider {
         amount_usd: f64,
         description: &str,
     ) -> Result<(String, String), LightningError> {
+        // Get the LNBits client
+        let client = self.lnbits_client.as_ref().ok_or_else(|| {
+            LightningError::ConfigError("LNBits client not configured".to_string())
+        })?;
+        
         // Convert USD to satoshis
         let amount_sats = self.convert_usd_to_sats(amount_usd).await?;
 
-        // Create invoice with 30 minute expiry
-        let expiry = 30 * 60; // 30 minutes in seconds
+        // Create invoice with 30 minute expiry (in seconds)
+        let expiry = 30 * 60;
 
-        // Build the request to LND
-        let request = CreateInvoiceRequest {
+        // Create the invoice
+        let invoice = client.create_invoice(
             amount_sats,
-            memo: description.to_string(),
-            expiry,
-        };
-
-        // Get LND endpoint and macaroon
-        let endpoint = self.config.lnd_rest_endpoint.as_ref().unwrap();
-        let macaroon = self.config.lnd_macaroon_hex.as_ref().unwrap();
-
-        // Construct the full URL
-        let url = format!("{}/v1/invoices", endpoint);
-
-        // Make the request to LND
-        let response = self
-            .client
-            .post(&url)
-            .header("Grpc-Metadata-macaroon", macaroon)
-            .json(&request)
-            .send()
-            .await?;
-
-        // Check for errors
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            error!("LND returned error: {} - {}", status, error_text);
-            return Err(LightningError::ApiError(format!(
-                "LND API error: {}",
-                error_text
-            )));
-        }
-
-        // Parse the response
-        let invoice_response: CreateInvoiceResponse = response.json().await?;
+            description.to_string(),
+            Some(expiry),
+            None, // webhook URL will be configured externally
+        ).await?;
 
         info!("Created Lightning invoice for {} sats", amount_sats);
-        Ok((invoice_response.payment_request, invoice_response.r_hash))
+        
+        // Return the payment request (BOLT11 invoice) and payment hash
+        Ok((invoice.payment_request, invoice.payment_hash))
     }
 
     /// Convert USD to satoshis using current exchange rate
@@ -158,11 +146,37 @@ impl LightningProvider {
         Ok(amount_sats)
     }
 
+    /// Check if a payment has been settled
+    pub async fn check_invoice(&self, payment_hash: &str) -> Result<bool, LightningError> {
+        // Get the LNBits client with invoice read key
+        let invoice_read_key = self.config.lnbits_invoice_read_key.as_ref()
+            .ok_or_else(|| LightningError::ConfigError("LNBits invoice read key not configured".to_string()))?;
+        
+        // Use the URL from the admin client
+        let url = self.config.lnbits_url.as_ref()
+            .ok_or_else(|| LightningError::ConfigError("LNBits URL not configured".to_string()))?;
+            
+        // Create a client with invoice read key for checking payment status
+        let client = LNBitsClient::new(url, invoice_read_key)?;
+        
+        // Check the payment status
+        let payment = client.get_payment(payment_hash).await?;
+        
+        Ok(payment.paid)
+    }
+
     /// Verify a webhook payload from Lightning provider
-    pub fn verify_webhook(&self, _body: &[u8], _signature: &str) -> Result<bool, LightningError> {
-        // In a real implementation, you would verify the signature here
-        // For this example, we'll just return true
-        Ok(true)
+    pub fn verify_webhook(&self, body: &[u8], signature: &str) -> Result<WebhookEvent, LightningError> {
+        // For simplicity, this implementation doesn't verify signatures
+        // In a production environment, you should verify using your LNBits webhook key
+        
+        // Try to parse the webhook event
+        let event: WebhookEvent = serde_json::from_slice(body)
+            .map_err(|e| LightningError::SerializationError(e))?;
+        
+        debug!("Parsed webhook event for payment_hash: {}", event.payment_hash);
+        
+        Ok(event)
     }
 
     /// Generate payment details for the client

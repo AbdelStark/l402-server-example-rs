@@ -36,7 +36,7 @@ Authorization: Bearer <user_id>
 
 - [Rust](https://www.rust-lang.org/tools/install) (latest stable)
 - [Redis](https://redis.io/download) (for data storage)
-- Optional: LND node or other Lightning payment provider
+- Optional: LNBits account (for Lightning Network payments)
 - Optional: Coinbase Commerce account
 
 ### Configuration
@@ -53,9 +53,11 @@ REDIS_URL=redis://localhost:6379
 
 # Lightning payment configuration
 LIGHTNING_ENABLED=true
-# LND_REST_ENDPOINT=https://localhost:8080
-# LND_MACAROON_HEX=your_macaroon_hex_here
-# LND_CERT_PATH=/path/to/tls.cert
+# LNBits configuration (preferred)
+# LNBITS_URL=https://legend.lnbits.com
+# LNBITS_ADMIN_KEY=your_admin_key_here
+# LNBITS_INVOICE_READ_KEY=your_invoice_read_key_here
+# LNBITS_WEBHOOK_KEY=your_webhook_verification_key_here
 
 # Coinbase payment configuration
 COINBASE_ENABLED=true
