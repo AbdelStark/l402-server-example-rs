@@ -54,7 +54,6 @@ impl std::fmt::Debug for RedisStorage {
 const USER_KEY_PREFIX: &str = "user:";
 const PAYMENT_REQ_KEY_PREFIX: &str = "payment:";
 const EXTERNAL_ID_KEY_PREFIX: &str = "external_payment:";
-const STOCK_CACHE_KEY_PREFIX: &str = "stock:";
 
 impl RedisStorage {
     /// Create a new Redis storage instance
@@ -252,46 +251,4 @@ impl RedisStorage {
         );
         Ok(request)
     }
-
-    /// Cache stock data with a 60-second TTL
-    pub async fn cache_stock_data(&self, symbol: &str, data: &str) -> Result<(), StorageError> {
-        let mut conn = self.pool.get().await.map_err(StorageError::from)?;
-        let key = format!("{}{}", STOCK_CACHE_KEY_PREFIX, symbol.to_uppercase());
-
-        // Cache for 60 seconds
-        let _: () = conn
-            .set_ex(key, data, 60)
-            .await
-            .map_err(StorageError::from)?;
-        debug!("Cached stock data for {}", symbol);
-        Ok(())
-    }
-
-    /// Get cached stock data if available
-    pub async fn get_cached_stock_data(
-        &self,
-        symbol: &str,
-    ) -> Result<Option<String>, StorageError> {
-        let mut conn = self.pool.get().await.map_err(StorageError::from)?;
-        let key = format!("{}{}", STOCK_CACHE_KEY_PREFIX, symbol.to_uppercase());
-
-        let result: Result<String, RedisError> = conn.get(key).await;
-        match result {
-            Ok(data) => {
-                debug!("Cache hit for stock data: {}", symbol);
-                Ok(Some(data))
-            }
-            Err(_) => {
-                debug!("Cache miss for stock data: {}", symbol);
-                Ok(None)
-            }
-        }
-    }
-}
-
-/// Create a Redis connection pool
-pub fn create_pool(redis_url: &str) -> Result<Pool> {
-    let cfg = RedisConfig::from_url(redis_url);
-    let pool = cfg.create_pool(Some(Runtime::Tokio1))?;
-    Ok(pool)
 }

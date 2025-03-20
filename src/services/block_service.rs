@@ -1,9 +1,8 @@
 use crate::models::BlockData;
-use crate::storage::RedisStorage;
 use anyhow::Result;
 use reqwest::Client;
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 /// Errors that can occur when fetching block data
 #[derive(Debug, Error)]
@@ -25,30 +24,19 @@ pub enum BlockDataError {
 #[derive(Clone)]
 pub struct BlockService {
     client: Client,
-    storage: RedisStorage,
 }
 
 impl BlockService {
     /// Create a new block service instance
-    pub fn new(storage: RedisStorage) -> Self {
+    pub fn new(_storage: crate::storage::RedisStorage) -> Self {
         Self {
             client: Client::new(),
-            storage,
         }
     }
 
     /// Fetch the latest Bitcoin block hash
     pub async fn get_latest_block(&self) -> Result<BlockData, BlockDataError> {
-        // Cache key for the latest block
-        let cache_key = "latest_block";
-
-        // Try to get from cache first
-        if let Ok(Some(cached_data)) = self.storage.get_cached_stock_data(cache_key).await {
-            if let Ok(data) = serde_json::from_str::<BlockData>(&cached_data) {
-                debug!("Returning cached block data");
-                return Ok(data);
-            }
-        }
+        // Previously we cached this data, but that functionality has been removed
 
         // Fetch the latest block hash from Blockstream API
         info!("Fetching latest Bitcoin block hash");
@@ -60,10 +48,8 @@ impl BlockService {
             timestamp: chrono::Utc::now(),
         };
 
-        // Cache the result
-        if let Ok(json) = serde_json::to_string(&block_data) {
-            let _ = self.storage.cache_stock_data(cache_key, &json).await;
-        }
+        // We no longer cache the result
+        // Previously we used the stock caching functions, which have been removed
 
         Ok(block_data)
     }
@@ -93,7 +79,7 @@ impl BlockService {
 
         // Get the text response (block hash as plain text)
         let block_hash = response.text().await?;
-        
+
         Ok(block_hash)
     }
 }

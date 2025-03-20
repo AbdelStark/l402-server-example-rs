@@ -58,88 +58,6 @@ pub async fn get_user_info(
     }
 }
 
-/// Handler for retrieving stock ticker data
-pub async fn get_ticker(
-    State(state): State<crate::api::routes::AppState>,
-    UserId(user_id): UserId,
-    Path(symbol): Path<String>,
-) -> impl IntoResponse {
-    let storage = &state.storage;
-    let stock_service = &state.stock_service;
-    let config = &state.config;
-    // Get the user
-    let user = match storage.get_user(&user_id).await {
-        Ok(user) => user,
-        Err(StorageError::UserNotFound) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({"error": "User not found"})),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            error!("Error retrieving user: {}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "Failed to retrieve user"})),
-            )
-                .into_response();
-        }
-    };
-
-    // Check if the user has enough credits
-    if user.credits < 1 {
-        // User is out of credits, return 402 Payment Required
-        info!("User {} is out of credits", user_id);
-
-        // Create the payment required response
-        let expiry = Utc::now() + Duration::minutes(30);
-        let payment_required = PaymentRequiredResponse {
-            expiry,
-            offers: config.offers.clone(),
-            payment_context_token: user_id,
-            payment_request_url: format!(
-                "http://{}:{}/l402/payment-request",
-                config.host, config.port
-            ),
-        };
-
-        return (StatusCode::PAYMENT_REQUIRED, Json(payment_required)).into_response();
-    }
-
-    // User has credits, try to get the stock data
-    match stock_service.get_stock_data(&symbol).await {
-        Ok(stock_data) => {
-            // Deduct one credit for the successful request
-            match storage.update_user_credits(&user_id, -1).await {
-                Ok(_) => {
-                    info!("User {} used 1 credit for ticker {}", user_id, symbol);
-                }
-                Err(e) => {
-                    error!("Failed to deduct credit from user {}: {}", user_id, e);
-                    // Continue anyway since the data was fetched
-                }
-            }
-
-            // Return the stock data
-            (StatusCode::OK, Json(stock_data)).into_response()
-        }
-        Err(e) => {
-            error!("Error fetching stock data for {}: {}", symbol, e);
-            let status = match e {
-                _ if e.to_string().contains("Invalid ticker") => StatusCode::BAD_REQUEST,
-                _ => StatusCode::SERVICE_UNAVAILABLE,
-            };
-
-            (
-                status,
-                Json(json!({"error": format!("Failed to fetch stock data: {}", e)})),
-            )
-                .into_response()
-        }
-    }
-}
-
 /// Handler for initiating a payment
 pub async fn initiate_payment(
     State(state): State<crate::api::routes::AppState>,
@@ -218,7 +136,7 @@ pub async fn get_latest_block(
     let storage = &state.storage;
     let block_service = &state.block_service;
     let config = &state.config;
-    
+
     // Get the user
     let user = match storage.get_user(&user_id).await {
         Ok(user) => user,
@@ -243,7 +161,7 @@ pub async fn get_latest_block(
     if user.credits < 1 {
         // User is out of credits, return 402 Payment Required
         info!("User {} is out of credits", user_id);
-        
+
         // Create the payment required response
         let expiry = Utc::now() + Duration::minutes(30);
         let payment_required = PaymentRequiredResponse {
@@ -255,7 +173,7 @@ pub async fn get_latest_block(
                 config.host, config.port
             ),
         };
-        
+
         return (StatusCode::PAYMENT_REQUIRED, Json(payment_required)).into_response();
     }
 
@@ -272,13 +190,13 @@ pub async fn get_latest_block(
                     // Continue anyway since the data was fetched
                 }
             }
-            
+
             // Return the block data
             (StatusCode::OK, Json(block_data)).into_response()
         }
         Err(e) => {
             error!("Error fetching latest block hash: {}", e);
-            
+
             (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(json!({"error": format!("Failed to fetch latest block hash: {}", e)})),

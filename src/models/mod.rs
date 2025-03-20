@@ -175,37 +175,6 @@ pub struct PaymentRequiredResponse {
     pub payment_request_url: String,
 }
 
-/// Stock market data response
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StockData {
-    /// Additional market data (price, ratios, etc.)
-    pub additional_data: StockAdditionalData,
-    /// Historical financial data
-    pub financial_data: Vec<FinancialData>,
-}
-
-/// Additional stock market data
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StockAdditionalData {
-    /// Current stock price
-    pub current_price: f64,
-    /// Earnings per share
-    pub eps: f64,
-    /// Price to earnings ratio
-    pub pe_ratio: f64,
-}
-
-/// Financial data for a fiscal period
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FinancialData {
-    /// End date of the fiscal period
-    pub fiscal_date_ending: String,
-    /// Total revenue for the period
-    pub total_revenue: f64,
-    /// Net income for the period
-    pub net_income: f64,
-}
-
 /// Bitcoin block data
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BlockData {

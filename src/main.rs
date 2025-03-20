@@ -8,7 +8,7 @@ mod storage;
 use anyhow::Result;
 use config::Config;
 use payments::PaymentService;
-use services::{BlockService, StockService};
+use services::BlockService;
 use storage::RedisStorage;
 use tracing::{error, info};
 
@@ -59,10 +59,6 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Initialize stock service
-    let stock_service = StockService::new(storage.clone());
-    info!("Stock service initialized");
-    
     // Initialize block service
     let block_service = BlockService::new(storage.clone());
     info!("Block service initialized");
@@ -72,7 +68,6 @@ async fn main() -> Result<()> {
         config_arc.clone(),
         storage.clone(),
         payment_service,
-        stock_service,
         block_service,
     );
 

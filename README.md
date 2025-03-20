@@ -18,7 +18,6 @@ A Rust implementation of an API paywalled with the L402 protocol. This project d
 - **GET /signup** - Create a new user account with 1 free credit
 - **GET /info** - Get current user info (requires authentication)
 - **GET /block** - Get the latest Bitcoin block hash, costs 1 credit (requires authentication)
-- **GET /ticker/{symbol}** - Get stock data for a symbol, costs 1 credit (requires authentication) *(legacy endpoint)*
 - **POST /l402/payment-request** - Initiate a payment to purchase more credits
 - **POST /webhook/lightning** - Lightning payment webhooks
 - **POST /webhook/coinbase** - Coinbase payment webhooks
@@ -27,7 +26,7 @@ A Rust implementation of an API paywalled with the L402 protocol. This project d
 
 Authentication is handled via a simple token-based system. When a user signs up, they receive a unique ID that serves as their API token. This token must be included in the `Authorization` header as a Bearer token:
 
-```
+```text
 Authorization: Bearer <user_id>
 ```
 
