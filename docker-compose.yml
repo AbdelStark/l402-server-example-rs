@@ -1,0 +1,33 @@
+version: '3'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - REDIS_URL=redis://redis:6379
+      - LIGHTNING_ENABLED=${LIGHTNING_ENABLED:-true}
+      - COINBASE_ENABLED=${COINBASE_ENABLED:-true}
+      - LND_REST_ENDPOINT=${LND_REST_ENDPOINT:-}
+      - LND_MACAROON_HEX=${LND_MACAROON_HEX:-}
+      - LND_CERT_PATH=${LND_CERT_PATH:-}
+      - COINBASE_API_KEY=${COINBASE_API_KEY:-}
+      - COINBASE_WEBHOOK_SECRET=${COINBASE_WEBHOOK_SECRET:-}
+      - RUST_LOG=info,l402_server_example_rs=debug
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
