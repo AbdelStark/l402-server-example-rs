@@ -1,24 +1,24 @@
 # L402 Server Example (Rust)
 
-A Rust implementation of an API paywalled with the L402 protocol. This project demonstrates how to implement a server that charges per API call using Lightning Network and Coinbase Commerce payments.
+A Rust implementation of an API paywalled with the L402 protocol. This project demonstrates how to implement a server that charges per API call using Lightning Network and Coinbase Commerce payments for Bitcoin blockchain data.
 
 ## Features
 
 - User creation and management
 - Credits-based API paywall system
-- Stock ticker data API endpoint
+- Bitcoin blockchain data API endpoint
 - Payment processing via:
   - Lightning Network
   - Coinbase Commerce
 - Webhook handling for payment confirmations
-- Redis-based data storage
+- Redis-based data storage and caching
 
 ## API Endpoints
 
 - **GET /signup** - Create a new user account with 1 free credit
 - **GET /info** - Get current user info (requires authentication)
-- **GET /ticker/{symbol}** - Get stock data for a symbol, costs 1 credit (requires authentication)
 - **GET /block** - Get the latest Bitcoin block hash, costs 1 credit (requires authentication)
+- **GET /ticker/{symbol}** - Get stock data for a symbol, costs 1 credit (requires authentication) *(legacy endpoint)*
 - **POST /l402/payment-request** - Initiate a payment to purchase more credits
 - **POST /webhook/lightning** - Lightning payment webhooks
 - **POST /webhook/coinbase** - Coinbase payment webhooks
@@ -135,32 +135,46 @@ Response:
 }
 ```
 
-### Getting Stock Data
+### Getting Bitcoin Block Data
 
 ```bash
-curl -H "Authorization: Bearer 57d102ff-7188-4eff-b868-2d46d649aafe" http://localhost:8080/ticker/AAPL
+curl -H "Authorization: Bearer 57d102ff-7188-4eff-b868-2d46d649aafe" http://localhost:8080/block
 ```
 
-If the user has credits, they will receive the stock data:
+If the user has credits, they will receive the latest Bitcoin block hash:
 ```json
 {
-  "additional_data": {
-    "current_price": 232.87,
-    "eps": 6.07,
-    "pe_ratio": 38.36
-  },
-  "financial_data": [
-    {
-      "fiscal_date_ending": "2023-09-30",
-      "total_revenue": 391035000000.0,
-      "net_income": 93736000000.0
-    },
-    ...
-  ]
+  "hash": "000000000000000000007b05bde2eb0be32cc10ec811cb636728e647e7cc0c63",
+  "timestamp": "2024-03-20T04:15:32Z"
 }
 ```
 
-If the user is out of credits, they will receive a 402 Payment Required response with available offers.
+If the user is out of credits, they will receive a 402 Payment Required response with available offers:
+```json
+{
+  "expiry": "2024-03-20T04:45:32Z",
+  "offers": [
+    {
+      "id": "offer1",
+      "title": "1 Credit Package",
+      "description": "Purchase 1 credit for API access",
+      "credits": 1,
+      "amount": 0.01,
+      "currency": "USD"
+    },
+    {
+      "id": "offer2",
+      "title": "5 Credits Package",
+      "description": "Purchase 5 credits for API access",
+      "credits": 5,
+      "amount": 0.05,
+      "currency": "USD"
+    }
+  ],
+  "payment_context_token": "57d102ff-7188-4eff-b868-2d46d649aafe",
+  "payment_request_url": "http://localhost:8080/l402/payment-request"
+}
+```
 
 ### Initiating a Payment
 
@@ -190,6 +204,20 @@ Response for Coinbase:
   "expires_at": "2024-03-20T03:09:44Z"
 }
 ```
+
+## Understanding the L402 Payment Flow
+
+This project demonstrates the L402 payment protocol flow:
+
+1. A user signs up and receives 1 free credit
+2. The user makes a request to `/block` to get Bitcoin block data
+3. After using their credit, the next request returns a 402 Payment Required response
+4. The response includes available payment options (offers)
+5. The user selects an offer and initiates a payment via Lightning or Coinbase
+6. Once payment is confirmed (via webhook), credits are added to the user's account
+7. The user can now make another request to `/block` using their new credits
+
+This implementation shows how micropayments can be used to monetize API access with cryptocurrency, making it suitable for applications where users pay small amounts for specific pieces of data.
 
 ## Development
 
