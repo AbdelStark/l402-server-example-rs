@@ -227,6 +227,12 @@ cargo install cargo-watch
 cargo watch -x run
 ```
 
+Run all checks and tests (requires Redis running):
+
+```bash
+./scripts/ci-check.sh
+```
+
 Run linting:
 
 ```bash
@@ -238,6 +244,52 @@ Format code:
 ```bash
 cargo fmt
 ```
+
+Prepare a new release:
+
+```bash
+./scripts/prepare-release.sh v1.0.0
+```
+
+## CI/CD Workflows
+
+This project uses GitHub Actions for continuous integration and deployment:
+
+### CI Workflow
+
+On every push and pull request to the main branch, the CI workflow runs:
+
+1. **Code Checks**:
+   - Code formatting verification
+   - Clippy linting
+   - Compilation check
+
+2. **Tests**:
+   - Runs all unit and integration tests
+   - Generates code coverage metrics
+
+3. **Security Audit**:
+   - Scans dependencies for known vulnerabilities with cargo-audit
+
+4. **Build**:
+   - Builds the release binary
+   - Uploads the binary as an artifact
+
+5. **Docker**:
+   - Builds the Docker image (on main branch only)
+
+### Release Workflow
+
+When a new release is published or triggered manually:
+
+1. **Release Build**:
+   - Builds the release binary
+   - Creates a distributable archive with documentation
+   - Uploads the archive as a release asset
+
+2. **Docker Publish**:
+   - Builds and pushes the Docker image to GitHub Container Registry
+   - Tags the image with the release version and latest
 
 ## License
 
