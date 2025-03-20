@@ -8,7 +8,7 @@ mod storage;
 use anyhow::Result;
 use config::Config;
 use payments::PaymentService;
-use services::StockService;
+use services::{BlockService, StockService};
 use storage::RedisStorage;
 use tracing::{error, info};
 
@@ -62,6 +62,10 @@ async fn main() -> Result<()> {
     // Initialize stock service
     let stock_service = StockService::new(storage.clone());
     info!("Stock service initialized");
+    
+    // Initialize block service
+    let block_service = BlockService::new(storage.clone());
+    info!("Block service initialized");
 
     // Create the router
     let app = api::create_router(
@@ -69,6 +73,7 @@ async fn main() -> Result<()> {
         storage.clone(),
         payment_service,
         stock_service,
+        block_service,
     );
 
     // Start the server

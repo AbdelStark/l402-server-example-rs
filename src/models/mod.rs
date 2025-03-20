@@ -205,3 +205,12 @@ pub struct FinancialData {
     /// Net income for the period
     pub net_income: f64,
 }
+
+/// Bitcoin block data
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BlockData {
+    /// Block hash
+    pub hash: String,
+    /// Timestamp when the data was fetched
+    pub timestamp: DateTime<Utc>,
+}

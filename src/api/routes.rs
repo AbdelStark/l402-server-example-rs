@@ -1,7 +1,7 @@
 use crate::api::handlers;
 use crate::config::Config;
 use crate::payments::PaymentService;
-use crate::services::StockService;
+use crate::services::{BlockService, StockService};
 use crate::storage::RedisStorage;
 use axum::{
     Router,
@@ -19,6 +19,7 @@ pub struct AppState {
     pub storage: RedisStorage,
     pub payment_service: PaymentService,
     pub stock_service: StockService,
+    pub block_service: BlockService,
 }
 
 pub fn create_router(
@@ -26,6 +27,7 @@ pub fn create_router(
     storage: RedisStorage,
     payment_service: PaymentService,
     stock_service: StockService,
+    block_service: BlockService,
 ) -> Router {
     // Create a CORS layer to allow cross-origin requests
     let cors = CorsLayer::new()
@@ -43,13 +45,15 @@ pub fn create_router(
     // Protected routes that require authentication
     let protected_routes = Router::new()
         .route("/info", get(handlers::get_user_info))
-        .route("/ticker/:symbol", get(handlers::get_ticker));
+        .route("/ticker/:symbol", get(handlers::get_ticker))
+        .route("/block", get(handlers::get_latest_block));
 
     let state = AppState {
         config,
         storage,
         payment_service,
         stock_service,
+        block_service,
     };
 
     // Combine all routes with shared state

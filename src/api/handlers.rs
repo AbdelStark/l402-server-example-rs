@@ -210,6 +210,84 @@ pub async fn lightning_webhook(
     }
 }
 
+/// Handler for retrieving Bitcoin latest block hash
+pub async fn get_latest_block(
+    State(state): State<crate::api::routes::AppState>,
+    UserId(user_id): UserId,
+) -> impl IntoResponse {
+    let storage = &state.storage;
+    let block_service = &state.block_service;
+    let config = &state.config;
+    
+    // Get the user
+    let user = match storage.get_user(&user_id).await {
+        Ok(user) => user,
+        Err(StorageError::UserNotFound) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "User not found"})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            error!("Error retrieving user: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to retrieve user"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Check if the user has enough credits
+    if user.credits < 1 {
+        // User is out of credits, return 402 Payment Required
+        info!("User {} is out of credits", user_id);
+        
+        // Create the payment required response
+        let expiry = Utc::now() + Duration::minutes(30);
+        let payment_required = PaymentRequiredResponse {
+            expiry,
+            offers: config.offers.clone(),
+            payment_context_token: user_id,
+            payment_request_url: format!(
+                "http://{}:{}/l402/payment-request",
+                config.host, config.port
+            ),
+        };
+        
+        return (StatusCode::PAYMENT_REQUIRED, Json(payment_required)).into_response();
+    }
+
+    // User has credits, try to get the latest block data
+    match block_service.get_latest_block().await {
+        Ok(block_data) => {
+            // Deduct one credit for the successful request
+            match storage.update_user_credits(&user_id, -1).await {
+                Ok(_) => {
+                    info!("User {} used 1 credit for latest block hash", user_id);
+                }
+                Err(e) => {
+                    error!("Failed to deduct credit from user {}: {}", user_id, e);
+                    // Continue anyway since the data was fetched
+                }
+            }
+            
+            // Return the block data
+            (StatusCode::OK, Json(block_data)).into_response()
+        }
+        Err(e) => {
+            error!("Error fetching latest block hash: {}", e);
+            
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Failed to fetch latest block hash: {}", e)})),
+            )
+                .into_response()
+        }
+    }
+}
+
 /// Handler for Coinbase webhooks
 pub async fn coinbase_webhook(
     State(state): State<crate::api::routes::AppState>,

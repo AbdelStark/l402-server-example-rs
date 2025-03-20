@@ -18,6 +18,7 @@ A Rust implementation of an API paywalled with the L402 protocol. This project d
 - **GET /signup** - Create a new user account with 1 free credit
 - **GET /info** - Get current user info (requires authentication)
 - **GET /ticker/{symbol}** - Get stock data for a symbol, costs 1 credit (requires authentication)
+- **GET /block** - Get the latest Bitcoin block hash, costs 1 credit (requires authentication)
 - **POST /l402/payment-request** - Initiate a payment to purchase more credits
 - **POST /webhook/lightning** - Lightning payment webhooks
 - **POST /webhook/coinbase** - Coinbase payment webhooks
