@@ -3,7 +3,7 @@ use crate::models::{PaymentRequestInput, PaymentRequestResponse, PaymentRequired
 use crate::storage::StorageError;
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::State,
     http::StatusCode,
     response::IntoResponse,
 };

@@ -28,6 +28,9 @@ pub struct BlockService {
 
 impl BlockService {
     /// Create a new block service instance
+    /// 
+    /// The _storage parameter is kept for compatibility with the previous API
+    /// but is no longer used since caching was removed
     pub fn new(_storage: crate::storage::RedisStorage) -> Self {
         Self {
             client: Client::new(),
