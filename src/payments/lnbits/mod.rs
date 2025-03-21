@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use reqwest::{
     Client as HttpClient,
     header::{HeaderMap, HeaderValue},
@@ -41,23 +40,39 @@ pub struct CreateInvoiceRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateInvoiceResponse {
+    #[allow(dead_code)]
     pub checking_id: String,
     pub payment_hash: String,
+    #[allow(dead_code)]
     pub wallet_id: String,
+    #[allow(dead_code)]
     pub amount: u64,
+    #[allow(dead_code)]
     pub fee: u64,
     pub bolt11: String,
+    #[allow(dead_code)]
     pub status: String,
+    #[allow(dead_code)]
     pub memo: Option<String>,
+    #[allow(dead_code)]
     pub expiry: Option<String>,
+    #[allow(dead_code)]
     pub webhook: Option<String>,
+    #[allow(dead_code)]
     pub webhook_status: Option<u32>,
+    #[allow(dead_code)]
     pub preimage: Option<String>,
+    #[allow(dead_code)]
     pub tag: Option<String>,
+    #[allow(dead_code)]
     pub extension: Option<String>,
+    #[allow(dead_code)]
     pub time: String,
+    #[allow(dead_code)]
     pub created_at: String,
+    #[allow(dead_code)]
     pub updated_at: String,
+    #[allow(dead_code)]
     pub extra: serde_json::Value,
 }
 
@@ -65,29 +80,49 @@ pub struct CreateInvoiceResponse {
 pub struct PaymentStatus {
     pub paid: bool,
     pub status: String,
+    #[allow(dead_code)]
     pub preimage: Option<String>,
+    #[allow(dead_code)]
     pub details: PaymentDetails,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PaymentDetails {
+    #[allow(dead_code)]
     pub checking_id: String,
+    #[allow(dead_code)]
     pub payment_hash: String,
+    #[allow(dead_code)]
     pub wallet_id: String,
+    #[allow(dead_code)]
     pub amount: u64,
+    #[allow(dead_code)]
     pub fee: u64,
+    #[allow(dead_code)]
     pub bolt11: String,
+    #[allow(dead_code)]
     pub status: String,
+    #[allow(dead_code)]
     pub memo: Option<String>,
+    #[allow(dead_code)]
     pub expiry: Option<String>,
+    #[allow(dead_code)]
     pub webhook: Option<String>,
+    #[allow(dead_code)]
     pub webhook_status: Option<u32>,
+    #[allow(dead_code)]
     pub preimage: Option<String>,
+    #[allow(dead_code)]
     pub tag: Option<String>,
+    #[allow(dead_code)]
     pub extension: Option<String>,
+    #[allow(dead_code)]
     pub time: String,
+    #[allow(dead_code)]
     pub created_at: String,
+    #[allow(dead_code)]
     pub updated_at: String,
+    #[allow(dead_code)]
     pub extra: serde_json::Value,
 }
 
@@ -101,7 +136,7 @@ impl LNBitsClient {
     ) -> Result<Self, LNBitsError> {
         let http_client = HttpClient::builder()
             .build()
-            .map_err(|e| LNBitsError::NetworkError(e))?;
+            .map_err(LNBitsError::NetworkError)?;
 
         Ok(Self {
             http_client,

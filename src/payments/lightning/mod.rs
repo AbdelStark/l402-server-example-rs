@@ -11,6 +11,7 @@ use tracing::{debug, error, info};
 
 /// Errors that can occur when interacting with Lightning
 #[derive(Debug, Error)]
+#[allow(clippy::enum_variant_names)]
 pub enum LightningError {
     /// Network error
     #[error("Network error: {0}")]
@@ -18,6 +19,7 @@ pub enum LightningError {
 
     /// API error
     #[error("Lightning API error: {0}")]
+    #[allow(dead_code)]
     ApiError(String),
 
     /// Missing configuration
@@ -40,8 +42,10 @@ pub enum LightningError {
 /// Lightning payment provider using LNBits
 #[derive(Clone)]
 pub struct LightningProvider {
+    #[allow(dead_code)]
     http_client: HttpClient,
     lnbits_client: Option<LNBitsClient>,
+    #[allow(dead_code)]
     config: Arc<Config>,
 }
 
@@ -106,12 +110,8 @@ impl LightningProvider {
             LightningError::ConfigError("LNBits client not configured".to_string())
         })?;
 
-        info!("Invoice requested for {} USD", amount_usd);
-
         // Convert USD to satoshis using market rate
         let amount_sats = utils::convert_usd_to_sats(amount_usd).await?;
-
-        info!("Converted amount to {} sats", amount_sats);
 
         // Create invoice with 30 minute expiry (in seconds)
         let expiry = 30 * 60;
@@ -125,8 +125,6 @@ impl LightningProvider {
             internal: false,
             out: false,
         };
-
-        info!("Invoice request: {:?}", invoice_request);
 
         // Create the invoice
         let invoice = client.create_invoice(&invoice_request).await?;
@@ -155,7 +153,7 @@ impl LightningProvider {
 
         // Try to parse the webhook event
         let event: WebhookEvent =
-            serde_json::from_slice(body).map_err(|e| LightningError::SerializationError(e))?;
+            serde_json::from_slice(body).map_err(LightningError::SerializationError)?;
 
         debug!(
             "Parsed webhook event for payment_hash: {}",

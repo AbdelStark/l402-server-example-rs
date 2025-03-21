@@ -15,8 +15,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, error, info};
 
-// Re-export LNBits types
-pub use lnbits::{LNBitsClient, LNBitsError};
+// No exports needed
 
 /// Errors that can occur in payment processing
 #[derive(Debug, Error)]
@@ -43,10 +42,12 @@ pub enum PaymentError {
 
     /// User not found
     #[error("User not found: {0}")]
+    #[allow(dead_code)]
     UserNotFound(String),
 
     /// Invalid input
     #[error("Invalid input: {0}")]
+    #[allow(dead_code)]
     InvalidInput(String),
 }
 

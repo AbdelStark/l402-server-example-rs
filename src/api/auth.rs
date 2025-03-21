@@ -15,8 +15,10 @@ pub enum AuthError {
     /// Invalid token format
     InvalidTokenFormat,
     /// User not found
+    #[allow(dead_code)]
     UserNotFound,
     /// Storage error
+    #[allow(dead_code)]
     StorageError(StorageError),
 }
 
@@ -81,6 +83,7 @@ where
 }
 
 /// Authentication middleware to verify a user's token
+#[allow(dead_code)]
 pub async fn require_auth(
     State(state): State<crate::api::routes::AppState>,
     request: Request,

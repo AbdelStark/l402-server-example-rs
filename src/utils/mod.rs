@@ -7,6 +7,7 @@ use thiserror::Error;
 use tracing::{debug, error};
 
 #[derive(Debug, Error)]
+#[allow(clippy::enum_variant_names)]
 pub enum ConversionError {
     #[error("Network error: {0}")]
     NetworkError(#[from] reqwest::Error),

@@ -39,6 +39,7 @@ pub struct Config {
     /// LNBits invoice read key (if using LNBits)
     pub lnbits_invoice_read_key: Option<String>,
     /// LNBits webhook verification key (if using LNBits)
+    #[allow(dead_code)]
     pub lnbits_webhook_key: Option<String>,
     /// Whether Coinbase payments are enabled
     pub coinbase_enabled: bool,

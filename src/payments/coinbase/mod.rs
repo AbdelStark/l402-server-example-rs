@@ -87,6 +87,7 @@ struct ChargeData {
     /// Payment addresses for different cryptocurrencies
     addresses: HashMap<String, String>,
     /// Pricing information
+    #[allow(dead_code)]
     pricing: Option<PricingInfo>,
 }
 
@@ -94,6 +95,7 @@ struct ChargeData {
 #[derive(Debug, Deserialize)]
 struct PricingInfo {
     /// Amount in local currency
+    #[allow(dead_code)]
     local: Option<LocalPrice>,
 }
 
@@ -101,8 +103,10 @@ struct PricingInfo {
 #[derive(Debug, Deserialize)]
 struct LocalPrice {
     /// Amount in local currency
+    #[allow(dead_code)]
     amount: String,
     /// Currency code
+    #[allow(dead_code)]
     currency: String,
 }
 

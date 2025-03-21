@@ -6,6 +6,7 @@ use tracing::{error, info};
 
 /// Errors that can occur when fetching block data
 #[derive(Debug, Error)]
+#[allow(clippy::enum_variant_names)]
 pub enum BlockDataError {
     /// Network error
     #[error("Network error: {0}")]
