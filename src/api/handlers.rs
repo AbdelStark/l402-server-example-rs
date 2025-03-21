@@ -234,3 +234,46 @@ pub async fn coinbase_webhook(
         }
     }
 }
+
+/// Handler for retrieving available payment options for credits
+pub async fn get_payment_options(
+    State(state): State<crate::api::routes::AppState>,
+    UserId(user_id): UserId,
+) -> impl IntoResponse {
+    let config = &state.config;
+    let storage = &state.storage;
+    
+    // Verify the user exists
+    match storage.get_user(&user_id).await {
+        Ok(_) => {
+            // Create the payment options response
+            let expiry = Utc::now() + Duration::minutes(30);
+            let payment_options = PaymentRequiredResponse {
+                expiry,
+                offers: config.offers.clone(),
+                payment_context_token: user_id,
+                payment_request_url: format!(
+                    "http://{}:{}/l402/payment-request",
+                    config.host, config.port
+                ),
+            };
+
+            (StatusCode::OK, Json(payment_options)).into_response()
+        },
+        Err(StorageError::UserNotFound) => {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "User not found"})),
+            )
+                .into_response()
+        },
+        Err(e) => {
+            error!("Error retrieving user: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to retrieve user"})),
+            )
+                .into_response()
+        }
+    }
+}
