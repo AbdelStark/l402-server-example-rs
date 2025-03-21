@@ -171,9 +171,20 @@ signup() {
     echo "$user_id"
 }
 
+# Get user info
+# Args:
+#   $1: auth token
+#   $2: optional flag to skip logging
+# Returns:
+#   user info JSON
 get_user_info() {
     local auth_token=$1
-    echo -e "${BLUE}Getting user info...${NC}"
+    local skip_logging=$2
+
+    if [ -z "$skip_logging" ]; then
+        echo -e "${BLUE}Getting user info...${NC}"
+    fi
+
     local response=$(call_api "/info" "Bearer $auth_token")
     
     # Try to parse the response as JSON to get credits
@@ -188,9 +199,11 @@ get_user_info() {
         fi
     fi
 
-    echo -e "${GREEN}✓ User info retrieved${NC}"
-    echo -e "  Credits: ${YELLOW}$credits${NC}"
-    echo
+    if [ -z "$skip_logging" ]; then
+        echo -e "${GREEN}✓ User info retrieved${NC}"
+        echo -e "  Credits: ${YELLOW}$credits${NC}"
+        echo
+    fi
 
     echo "$response"
 }
@@ -399,12 +412,10 @@ echo -e "${BLUE}Step 5: Requesting Lightning payment invoice...${NC}"
 PAYMENT_REQUEST=$(call_api "/l402/payment-request" "" "POST" \
     "{\"offer_id\":\"$OFFER_ID\",\"payment_method\":\"lightning\",\"payment_context_token\":\"$PAYMENT_CONTEXT_TOKEN\"}")
 
-echo "PAYMENT_REQUEST: $PAYMENT_REQUEST"
-
 # Check if the response contains a valid payment request
 if echo "$PAYMENT_REQUEST" | jq -e '.' >/dev/null 2>&1; then
     # Try to extract lightning invoice
-    LIGHTNING_INVOICE=$(echo "$PAYMENT_REQUEST" | jq -r '.payment_request.lightning_invoice // empty')
+    LIGHTNING_INVOICE=$(echo "$PAYMENT_REQUEST" | jq -r '.lightning_invoice // empty')
     if [ -z "$LIGHTNING_INVOICE" ] || [ "$LIGHTNING_INVOICE" = "null" ]; then
         echo -e "${RED}Error: Could not extract Lightning invoice from response${NC}"
         echo "Response: $PAYMENT_REQUEST"
@@ -413,22 +424,11 @@ if echo "$PAYMENT_REQUEST" | jq -e '.' >/dev/null 2>&1; then
     
     # Extract other useful information
     EXPIRES_AT=$(echo "$PAYMENT_REQUEST" | jq -r '.expires_at // "unknown"')
-    AMOUNT_SATS=$(echo "$PAYMENT_REQUEST" | jq -r '.payment_request.amount_sats // "unknown"')
 else
     echo -e "${RED}Error: Invalid JSON in payment request response${NC}"
     echo "Response: $PAYMENT_REQUEST"
     exit 1
 fi
-
-# Get a clean AUTH_TOKEN (just the ID)
-if [[ "$AUTH_TOKEN" =~ ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}) ]]; then
-    CLEAN_TOKEN="${BASH_REMATCH[1]}"
-else
-    CLEAN_TOKEN="$AUTH_TOKEN"
-fi
-
-# Also update our current variable for display
-AUTH_TOKEN="$CLEAN_TOKEN"
 
 echo -e "${GREEN}✓ Lightning invoice generated${NC}"
 echo -e "  Lightning Invoice: ${YELLOW}$LIGHTNING_INVOICE${NC}"
@@ -472,15 +472,15 @@ if echo "$USER_INFO" | jq -e '.' >/dev/null 2>&1; then
 fi
 
 PAYMENT_CONFIRMED=false
-MAX_TRIES=60  # Check for up to 5 minutes (60 * 5 seconds)
+MAX_TRIES=30  # Check for up to 60 seconds (30 * 2 seconds)
 for i in $(seq 1 $MAX_TRIES); do
     echo -e "Checking payment status ($i/$MAX_TRIES)..."
     
     # Check current credits
-    USER_INFO=$(get_user_info "$AUTH_TOKEN")
+    USER_INFO=$(get_user_info "$AUTH_TOKEN" "true")
     if echo "$USER_INFO" | jq -e '.' >/dev/null 2>&1; then
         CURRENT_CREDITS=$(echo "$USER_INFO" | jq -r '.credits // "0"')
-        
+       
         # Compare with initial credits
         if [ "$CURRENT_CREDITS" -gt "$INITIAL_CREDITS" ]; then
             PAYMENT_CONFIRMED=true
@@ -490,9 +490,8 @@ for i in $(seq 1 $MAX_TRIES); do
             break
         fi
     fi
-    
     # Wait before checking again
-    sleep 5
+    sleep 2
 done
 
 if [ "$PAYMENT_CONFIRMED" = false ]; then

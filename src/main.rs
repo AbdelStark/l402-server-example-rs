@@ -49,16 +49,15 @@ async fn main() -> Result<()> {
     let config_arc = config.into_arc();
 
     // Initialize payment service
-    let payment_service = match PaymentService::new(config_arc.clone(), storage.clone()) {
-        Ok(service) => {
-            info!("Payment service initialized");
-            service
-        }
+    let mut payment_service =
+        PaymentService::new_without_providers(config_arc.clone(), storage.clone());
+    match payment_service.init_providers() {
+        Ok(_) => info!("Payment service initialized"),
         Err(e) => {
             error!("Failed to initialize payment service: {}", e);
             return Err(anyhow::anyhow!("{}", e));
         }
-    };
+    }
 
     // Initialize block service
     let block_service = BlockService::new(storage.clone());

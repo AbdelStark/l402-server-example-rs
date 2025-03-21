@@ -38,9 +38,8 @@ pub struct Config {
     pub lnbits_admin_key: Option<String>,
     /// LNBits invoice read key (if using LNBits)
     pub lnbits_invoice_read_key: Option<String>,
-    /// LNBits webhook verification key (if using LNBits)
-    #[allow(dead_code)]
-    pub lnbits_webhook_key: Option<String>,
+    /// LNBits webhook url
+    pub lnbits_webhook_url: Option<String>,
     /// Whether Coinbase payments are enabled
     pub coinbase_enabled: bool,
     /// Coinbase Commerce API key (if applicable)
@@ -130,9 +129,9 @@ impl Config {
         if lnbits_invoice_read_key.is_some() {
             debug!("Found LNBITS_INVOICE_READ_KEY");
         }
-        let lnbits_webhook_key = env::var("LNBITS_WEBHOOK_KEY").ok();
-        if lnbits_webhook_key.is_some() {
-            debug!("Found LNBITS_WEBHOOK_KEY");
+        let lnbits_webhook_url = env::var("LNBITS_WEBHOOK_URL").ok();
+        if lnbits_webhook_url.is_some() {
+            debug!("Found LNBITS_WEBHOOK_URL");
         }
 
         let coinbase_enabled = env::var("COINBASE_ENABLED")
@@ -162,7 +161,7 @@ impl Config {
             lnbits_url,
             lnbits_admin_key,
             lnbits_invoice_read_key,
-            lnbits_webhook_key,
+            lnbits_webhook_url,
             coinbase_enabled,
             coinbase_api_key,
             coinbase_webhook_secret,

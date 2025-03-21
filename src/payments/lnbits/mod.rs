@@ -79,7 +79,6 @@ pub struct CreateInvoiceResponse {
 #[derive(Debug, Deserialize)]
 pub struct PaymentStatus {
     pub paid: bool,
-    pub status: String,
     #[allow(dead_code)]
     pub preimage: Option<String>,
     #[allow(dead_code)]
@@ -229,7 +228,7 @@ impl LNBitsClient {
 
         debug!(
             "Payment status: paid={}, status={}",
-            payment.paid, payment.status
+            payment.paid, payment.details.status
         );
         Ok(payment.paid)
     }

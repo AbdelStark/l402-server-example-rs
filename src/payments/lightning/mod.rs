@@ -1,13 +1,12 @@
 use crate::config::Config;
 use crate::models::PaymentRequestDetails;
 use crate::payments::lnbits::{CreateInvoiceRequest, LNBitsClient, LNBitsError};
-use crate::utils::{self, ConversionError};
+use crate::utils::ConversionError;
 use anyhow::Result;
-use reqwest::Client as HttpClient;
 use serde::Deserialize;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::error;
 
 /// Errors that can occur when interacting with Lightning
 #[derive(Debug, Error)]
@@ -17,13 +16,8 @@ pub enum LightningError {
     #[error("Network error: {0}")]
     NetworkError(#[from] reqwest::Error),
 
-    /// API error
-    #[error("Lightning API error: {0}")]
-    #[allow(dead_code)]
-    ApiError(String),
-
     /// Missing configuration
-    #[error("Missing Lightning configuration: {0}")]
+    #[error("Missing configuration: {0}")]
     ConfigError(String),
 
     /// Serialization error
@@ -42,11 +36,7 @@ pub enum LightningError {
 /// Lightning payment provider using LNBits
 #[derive(Clone)]
 pub struct LightningProvider {
-    #[allow(dead_code)]
-    http_client: HttpClient,
     lnbits_client: Option<LNBitsClient>,
-    #[allow(dead_code)]
-    config: Arc<Config>,
 }
 
 /// Invoice webhook event data from LNBits
@@ -54,112 +44,87 @@ pub struct LightningProvider {
 pub struct WebhookEvent {
     /// Payment hash
     pub payment_hash: String,
-    /// Status of the payment (true if paid)
-    pub payment_status: bool,
 }
 
 impl LightningProvider {
     /// Create a new Lightning payment provider
     pub fn new(config: Arc<Config>) -> Result<Self, LightningError> {
-        // Ensure required configs are present
-        if !config.lightning_enabled {
-            return Err(LightningError::ConfigError(
-                "Lightning payments are not enabled".to_string(),
-            ));
-        }
+        let lnbits_client = if config.lightning_enabled {
+            // Check if all required LNBits configs are present
+            let url = config.lnbits_url.as_ref().ok_or_else(|| {
+                LightningError::ConfigError("LNBits URL not configured".to_string())
+            })?;
+            let admin_key = config.lnbits_admin_key.as_ref().ok_or_else(|| {
+                LightningError::ConfigError("LNBits admin key not configured".to_string())
+            })?;
+            let invoice_read_key = config.lnbits_invoice_read_key.as_ref().ok_or_else(|| {
+                LightningError::ConfigError("LNBits invoice read key not configured".to_string())
+            })?;
 
-        // Create HTTP client
-        let http_client = HttpClient::new();
-
-        // Check for LNBits configuration
-        let lnbits_client = if let (Some(url), Some(admin_key), Some(invoice_read_key)) = (
-            &config.lnbits_url,
-            &config.lnbits_admin_key,
-            &config.lnbits_invoice_read_key,
-        ) {
-            // Create LNBits client
-            match LNBitsClient::new("", admin_key, invoice_read_key, url, None) {
-                Ok(client) => {
-                    info!("LNBits client initialized with admin key");
-                    Some(client)
-                }
-                Err(err) => {
-                    error!("Failed to initialize LNBits client: {}", err);
-                    return Err(LightningError::LNBitsError(err));
-                }
-            }
+            Some(
+                LNBitsClient::new(
+                    "default", // wallet_id - not used but required
+                    admin_key,
+                    invoice_read_key,
+                    url,
+                    None, // cert_path
+                )
+                .map_err(LightningError::LNBitsError)?,
+            )
         } else {
             None
         };
 
-        Ok(Self {
-            http_client,
-            lnbits_client,
-            config,
-        })
+        Ok(Self { lnbits_client })
     }
 
     /// Create a Lightning invoice for the specified amount
     pub async fn create_invoice(
         &self,
-        amount_usd: f64,
-        description: &str,
+        amount_sats: u64,
+        memo: &str,
     ) -> Result<(String, String), LightningError> {
-        // Get the LNBits client
-        let client = self.lnbits_client.as_ref().ok_or_else(|| {
-            LightningError::ConfigError("LNBits client not configured".to_string())
-        })?;
-
-        // Convert USD to satoshis using market rate
-        let amount_sats = utils::convert_usd_to_sats(amount_usd).await?;
-
-        // Create invoice with 30 minute expiry (in seconds)
-        let expiry = 30 * 60;
+        let client = self
+            .lnbits_client
+            .as_ref()
+            .ok_or_else(|| LightningError::ConfigError("LNBits not configured".to_string()))?;
 
         let invoice_request = CreateInvoiceRequest {
             amount: amount_sats,
-            memo: Some(description.to_string()),
+            memo: Some(memo.to_owned()),
             unit: "sat".to_string(),
-            expiry: Some(expiry),
-            webhook: None,
+            expiry: Some(1800), // 30 minutes
+            webhook: None,      // We'll use polling instead
             internal: false,
             out: false,
         };
 
-        // Create the invoice
         let invoice = client.create_invoice(&invoice_request).await?;
-        Ok((invoice.bolt11, invoice.payment_hash))
+        let payment_hash = invoice.payment_hash.clone();
+
+        Ok((invoice.bolt11, payment_hash))
     }
 
-    /// Check if a payment has been settled
+    /// Check if an invoice has been paid
     pub async fn check_invoice(&self, payment_hash: &str) -> Result<bool, LightningError> {
-        // Get the LNBits client
-        let client = self.lnbits_client.as_ref().ok_or_else(|| {
-            LightningError::ConfigError("LNBits client not configured".to_string())
-        })?;
+        let client = self
+            .lnbits_client
+            .as_ref()
+            .ok_or_else(|| LightningError::ConfigError("LNBits not configured".to_string()))?;
 
-        // Check the payment status
-        Ok(client.is_invoice_paid(payment_hash).await?)
+        let status = client.is_invoice_paid(payment_hash).await?;
+        Ok(status)
     }
 
-    /// Verify a webhook payload from Lightning provider
+    /// Verify a webhook signature and parse the event
     pub fn verify_webhook(
         &self,
         body: &[u8],
         _signature: &str,
     ) -> Result<WebhookEvent, LightningError> {
-        // For simplicity, this implementation doesn't verify signatures
-        // In a production environment, you should verify using your LNBits webhook key
-
-        // Try to parse the webhook event
-        let event: WebhookEvent =
-            serde_json::from_slice(body).map_err(LightningError::SerializationError)?;
-
-        debug!(
-            "Parsed webhook event for payment_hash: {}",
-            event.payment_hash
-        );
-
+        // For now, we just parse the body without verifying the signature
+        // since LNBits doesn't provide webhook signatures
+        let event: WebhookEvent = serde_json::from_slice(body)?;
         Ok(event)
     }
 

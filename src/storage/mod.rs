@@ -1,4 +1,4 @@
-use crate::models::{PaymentRequest, PaymentStatus, User};
+use crate::models::{PaymentRequest, User};
 use anyhow::Result;
 use chrono::Utc;
 use deadpool_redis::{Config as RedisConfig, Pool, Runtime};
@@ -216,39 +216,5 @@ impl RedisStorage {
 
         // Then get the actual payment request
         self.get_payment_request(&request_id).await
-    }
-
-    /// Update a payment request status
-    pub async fn update_payment_request_status(
-        &self,
-        request_id: &str,
-        status: PaymentStatus,
-    ) -> Result<PaymentRequest, StorageError> {
-        let mut conn = self.pool.get().await.map_err(StorageError::from)?;
-        let key = format!("{}{}", PAYMENT_REQ_KEY_PREFIX, request_id);
-
-        // Get the current request
-        let req_json: String = conn
-            .get(&key)
-            .await
-            .map_err(|_| StorageError::PaymentRequestNotFound)?;
-        let mut request: PaymentRequest =
-            serde_json::from_str(&req_json).map_err(StorageError::from)?;
-
-        // Update status
-        request.status = status;
-
-        // Save the updated request
-        let updated_req_json = serde_json::to_string(&request).map_err(StorageError::from)?;
-        let _: () = conn
-            .set(key, updated_req_json)
-            .await
-            .map_err(StorageError::from)?;
-
-        info!(
-            "Updated payment request {}: status={:?}",
-            request_id, status
-        );
-        Ok(request)
     }
 }

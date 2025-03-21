@@ -3,19 +3,26 @@ pub mod lightning;
 pub mod lnbits;
 
 use crate::config::{Config, Offer};
-use crate::models::{
-    PaymentMethod, PaymentRequest, PaymentRequestDetails, PaymentRequestInput, PaymentStatus,
-};
 use crate::storage::{RedisStorage, StorageError};
+use crate::utils;
+use crate::{
+    models::{
+        PaymentMethod, PaymentRequest, PaymentRequestDetails, PaymentRequestInput, PaymentStatus,
+    },
+    utils::ConversionError,
+};
 use anyhow::Result;
 use chrono::{Duration, Utc};
 use coinbase::CoinbaseProvider;
 use lightning::LightningProvider;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tokio::time;
+use tracing::{debug, error, info, warn};
 
 // No exports needed
+
+// Re-export LNBits types
 
 /// Errors that can occur in payment processing
 #[derive(Debug, Error)]
@@ -49,6 +56,26 @@ pub enum PaymentError {
     #[error("Invalid input: {0}")]
     #[allow(dead_code)]
     InvalidInput(String),
+
+    /// Payment already processed
+    #[error("Payment already processed: {0}")]
+    AlreadyProcessed(String),
+
+    /// Payment expired
+    #[error("Payment expired: {0}")]
+    PaymentExpired(String),
+
+    /// Payment not found
+    #[error("Payment not found: {0}")]
+    PaymentNotFound(String),
+
+    /// Conversion error
+    #[error("Conversion error: {0}")]
+    ConversionError(#[from] ConversionError),
+
+    /// Invalid offer
+    #[error("Invalid offer: {0}")]
+    InvalidOffer(String),
 }
 
 /// Service for handling payments
@@ -61,45 +88,45 @@ pub struct PaymentService {
 }
 
 impl PaymentService {
-    /// Create a new payment service
-    pub fn new(config: Arc<Config>, storage: RedisStorage) -> Result<Self, PaymentError> {
-        // Initialize payment providers based on configuration
-        let lightning_provider = if config.lightning_enabled {
-            match LightningProvider::new(Arc::clone(&config)) {
+    /// Create a new payment service without providers
+    pub fn new_without_providers(config: Arc<Config>, storage: RedisStorage) -> Self {
+        Self {
+            storage,
+            config,
+            lightning_provider: None,
+            coinbase_provider: None,
+        }
+    }
+
+    /// Initialize payment providers
+    pub fn init_providers(&mut self) -> Result<(), PaymentError> {
+        // Initialize Lightning provider if configured
+        if self.config.lightning_enabled {
+            match LightningProvider::new(Arc::clone(&self.config)) {
                 Ok(provider) => {
                     info!("Lightning payment provider initialized");
-                    Some(provider)
+                    self.lightning_provider = Some(provider);
                 }
                 Err(err) => {
                     error!("Failed to initialize Lightning provider: {}", err);
-                    None
                 }
             }
-        } else {
-            None
-        };
+        }
 
-        let coinbase_provider = if config.coinbase_enabled {
-            match CoinbaseProvider::new(Arc::clone(&config)) {
+        // Initialize Coinbase provider if configured
+        if self.config.coinbase_enabled {
+            match CoinbaseProvider::new(Arc::clone(&self.config)) {
                 Ok(provider) => {
                     info!("Coinbase payment provider initialized");
-                    Some(provider)
+                    self.coinbase_provider = Some(provider);
                 }
                 Err(err) => {
                     error!("Failed to initialize Coinbase provider: {}", err);
-                    None
                 }
             }
-        } else {
-            None
-        };
+        }
 
-        Ok(Self {
-            storage,
-            config,
-            lightning_provider,
-            coinbase_provider,
-        })
+        Ok(())
     }
 
     /// Process a payment request
@@ -107,52 +134,40 @@ impl PaymentService {
         &self,
         input: PaymentRequestInput,
     ) -> Result<(PaymentRequest, PaymentRequestDetails), PaymentError> {
-        // Get the offer being purchased
-        let offer = self.get_offer(&input.offer_id)?;
+        // Get the offer
+        let offer = self
+            .config
+            .offers
+            .iter()
+            .find(|o| o.id == input.offer_id)
+            .ok_or_else(|| PaymentError::InvalidOffer(input.offer_id.clone()))?;
 
-        // Validate the payment method
-        match input.payment_method {
-            PaymentMethod::Lightning => {
-                if self.lightning_provider.is_none() {
-                    return Err(PaymentError::InvalidPaymentMethod(input.payment_method));
-                }
-            }
-            PaymentMethod::Coinbase => {
-                if self.coinbase_provider.is_none() {
-                    return Err(PaymentError::InvalidPaymentMethod(input.payment_method));
-                }
-            }
-        }
-
-        // Create a payment request
-        let expires_at = Utc::now() + Duration::minutes(30); // 30 minute expiry
-        let mut payment_request = PaymentRequest::new(
+        // Create payment request
+        let payment_request = PaymentRequest::new(
             input.payment_context_token.clone(),
-            offer.id.clone(),
+            input.offer_id.clone(),
             offer.credits,
             input.payment_method,
-            expires_at,
+            Utc::now() + Duration::minutes(30),
         );
 
-        // Process the payment based on the selected method
+        // Store the payment request
+        self.storage
+            .store_payment_request(&payment_request)
+            .await
+            .map_err(PaymentError::from)?;
+
+        // Process payment based on method
         let payment_details = match input.payment_method {
             PaymentMethod::Lightning => {
-                self.create_lightning_payment(&mut payment_request, offer)
+                self.create_lightning_payment(&payment_request, offer)
                     .await?
             }
             PaymentMethod::Coinbase => {
-                self.create_coinbase_payment(
-                    &mut payment_request,
-                    offer,
-                    input.chain.as_deref(),
-                    input.asset.as_deref(),
-                )
-                .await?
+                self.create_coinbase_payment(&payment_request, offer, input.chain, input.asset)
+                    .await?
             }
         };
-
-        // Store the payment request
-        self.storage.store_payment_request(&payment_request).await?;
 
         Ok((payment_request, payment_details))
     }
@@ -160,7 +175,7 @@ impl PaymentService {
     /// Create a Lightning payment
     async fn create_lightning_payment(
         &self,
-        payment_request: &mut PaymentRequest,
+        payment_request: &PaymentRequest,
         offer: &Offer,
     ) -> Result<PaymentRequestDetails, PaymentError> {
         let provider = self
@@ -168,41 +183,48 @@ impl PaymentService {
             .as_ref()
             .ok_or_else(|| PaymentError::InvalidPaymentMethod(PaymentMethod::Lightning))?;
 
-        // Create a description for the invoice
-        let description = format!(
-            "Purchase {} credits for API access - {}",
-            offer.credits, offer.title
-        );
-
-        // Create the Lightning invoice
-        let (invoice, r_hash) = provider
-            .create_invoice(offer.amount, &description)
+        // Convert USD to sats
+        let amount_sats = utils::convert_usd_to_sats(offer.amount)
             .await
             .map_err(PaymentError::from)?;
 
-        // Store the payment hash as the external ID
-        payment_request.external_id = Some(r_hash);
+        // Create invoice
+        let (invoice, payment_hash) = provider
+            .create_invoice(amount_sats, &format!("Purchase {} credits", offer.credits))
+            .await?;
 
-        // Generate payment details for the client
-        let details = provider.generate_payment_details(&invoice);
+        // Update payment request with external ID
+        let mut updated_request = payment_request.clone();
+        updated_request.external_id = Some(payment_hash.clone());
+        self.storage
+            .store_payment_request(&updated_request)
+            .await
+            .map_err(PaymentError::from)?;
 
-        Ok(details)
+        // Start polling for payment in background
+        let service = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = service.start_payment_polling(payment_hash, None).await {
+                error!("Error polling payment status: {}", e);
+            }
+        });
+
+        Ok(provider.generate_payment_details(&invoice))
     }
 
     /// Create a Coinbase payment
     async fn create_coinbase_payment(
         &self,
-        payment_request: &mut PaymentRequest,
+        payment_request: &PaymentRequest,
         offer: &Offer,
-        chain: Option<&str>,
-        asset: Option<&str>,
+        chain: Option<String>,
+        asset: Option<String>,
     ) -> Result<PaymentRequestDetails, PaymentError> {
         let provider = self
             .coinbase_provider
             .as_ref()
             .ok_or_else(|| PaymentError::InvalidPaymentMethod(PaymentMethod::Coinbase))?;
 
-        // Create a description for the charge
         let description = format!(
             "Purchase {} credits for API access - {}",
             offer.credits, offer.title
@@ -216,21 +238,144 @@ impl PaymentService {
                 &description,
                 &payment_request.id,
             )
+            .await?;
+
+        // Store the charge ID as the external ID
+        let mut updated_request = payment_request.clone();
+        updated_request.external_id = Some(charge_id);
+
+        // Save the updated payment request
+        self.storage
+            .store_payment_request(&updated_request)
             .await
             .map_err(PaymentError::from)?;
 
-        // Store the charge ID as the external ID
-        payment_request.external_id = Some(charge_id);
-
         // Generate payment details for the client
-        let details = provider.generate_payment_details(
+        Ok(provider.generate_payment_details(
             &checkout_url,
             usdc_address.as_deref(),
-            chain,
-            asset.unwrap_or("USDC").into(),
+            chain.as_deref(),
+            asset.as_deref(),
+        ))
+    }
+
+    /// Process a successful payment and update user credits
+    async fn process_successful_payment(
+        &self,
+        payment_request: &mut PaymentRequest,
+    ) -> Result<(), PaymentError> {
+        // Only process if payment is still pending
+        if payment_request.status != PaymentStatus::Pending {
+            debug!(
+                "Payment {} already processed (status: {:?})",
+                payment_request.id, payment_request.status
+            );
+            return Ok(());
+        }
+
+        // Update payment status
+        payment_request.status = PaymentStatus::Paid;
+
+        // Store the updated payment request
+        self.storage
+            .store_payment_request(payment_request)
+            .await
+            .map_err(PaymentError::from)?;
+
+        // Update user credits
+        self.storage
+            .update_user_credits(&payment_request.user_id, payment_request.credits as i32)
+            .await
+            .map_err(PaymentError::from)?;
+
+        info!(
+            "Payment {} processed successfully for user {}",
+            payment_request.id, payment_request.user_id
         );
 
-        Ok(details)
+        Ok(())
+    }
+
+    /// Start polling for payment status
+    pub async fn start_payment_polling(
+        &self,
+        payment_hash: String,
+        timeout_minutes: Option<u64>,
+    ) -> Result<(), PaymentError> {
+        let provider = self
+            .lightning_provider
+            .as_ref()
+            .ok_or_else(|| PaymentError::InvalidPaymentMethod(PaymentMethod::Lightning))?;
+
+        let timeout = timeout_minutes.unwrap_or(30);
+        let timeout_duration = Duration::minutes(timeout as i64);
+        let start_time = Utc::now();
+        let poll_interval = time::Duration::from_millis(500); // Poll every 500ms
+
+        info!("Starting payment polling for hash: {}", payment_hash);
+
+        loop {
+            // Check if we've exceeded the timeout
+            if Utc::now() - start_time > timeout_duration {
+                warn!("Payment polling timed out for hash: {}", payment_hash);
+                return Ok(());
+            }
+
+            // Check payment status
+            match provider.check_invoice(&payment_hash).await {
+                Ok(true) => {
+                    // Get the payment request
+                    match self
+                        .storage
+                        .get_payment_request_by_external_id(&payment_hash)
+                        .await
+                    {
+                        Ok(mut payment_request) => {
+                            // Process the successful payment
+                            match self.process_successful_payment(&mut payment_request).await {
+                                Ok(_) => {
+                                    info!("Payment confirmed and processed: {}", payment_hash);
+                                    return Ok(());
+                                }
+                                Err(PaymentError::AlreadyProcessed(_)) => {
+                                    debug!(
+                                        "Payment already processed, stopping polling: {}",
+                                        payment_hash
+                                    );
+                                    return Ok(());
+                                }
+                                Err(PaymentError::PaymentExpired(_)) => {
+                                    debug!("Payment expired, stopping polling: {}", payment_hash);
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    error!("Error processing payment: {}", e);
+                                    // Continue polling in case it's a temporary error
+                                }
+                            }
+                        }
+                        Err(StorageError::PaymentRequestNotFound) => {
+                            debug!("Payment request not found for hash: {}", payment_hash);
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            error!("Error retrieving payment request: {}", e);
+                            // Continue polling in case it's a temporary error
+                        }
+                    }
+                }
+                Ok(false) => {
+                    debug!("Payment not yet received: {}", payment_hash);
+                }
+                Err(e) => {
+                    error!("Error checking payment status: {}", e);
+                    // Continue polling in case it's a temporary error
+                }
+            }
+
+            // Wait before next poll
+            time::sleep(poll_interval).await;
+        }
     }
 
     /// Process a Lightning webhook
@@ -244,79 +389,52 @@ impl PaymentService {
             .as_ref()
             .ok_or_else(|| PaymentError::InvalidPaymentMethod(PaymentMethod::Lightning))?;
 
-        // Verify and parse the webhook event
-        let event = match provider.verify_webhook(body, signature) {
-            Ok(event) => event,
-            Err(e) => {
-                error!("Failed to verify webhook: {}", e);
-                return Ok(None);
-            }
-        };
+        // Verify and parse the webhook
+        let event = provider
+            .verify_webhook(body, signature)
+            .map_err(PaymentError::from)?;
 
-        // Check if payment is actually settled
-        if !event.payment_status {
-            // Event doesn't indicate a completed payment
-            debug!(
-                "Ignoring webhook for non-paid invoice: {}",
-                event.payment_hash
-            );
-            return Ok(None);
-        }
-
-        // Get the payment hash from the webhook data
-        let payment_hash = &event.payment_hash;
-
-        // Additionally verify the payment status directly (extra safety check)
-        let is_paid = match provider.check_invoice(payment_hash).await {
-            Ok(paid) => paid,
-            Err(e) => {
-                error!("Failed to verify payment status: {}", e);
-                // Continue processing based on webhook data alone
-                event.payment_status
-            }
-        };
-
-        if !is_paid {
-            debug!("Payment verification failed for hash: {}", payment_hash);
-            return Ok(None);
-        }
-
-        // Look up the payment request by the payment hash
-        let payment_request = match self
+        // Get the payment request
+        let mut payment_request = match self
             .storage
-            .get_payment_request_by_external_id(payment_hash)
+            .get_payment_request_by_external_id(&event.payment_hash)
             .await
         {
             Ok(request) => request,
-            Err(_) => {
-                debug!("Payment request not found for hash: {}", payment_hash);
-                return Ok(None); // Payment not found, ignore
+            Err(StorageError::PaymentRequestNotFound) => {
+                debug!("Payment request not found for hash: {}", event.payment_hash);
+                return Ok(None);
             }
+            Err(e) => return Err(PaymentError::from(e)),
         };
 
-        // Check if the payment is already paid
+        // Check if already processed
         if payment_request.status == PaymentStatus::Paid {
-            debug!("Payment already processed: {}", payment_hash);
-            return Ok(None); // Already processed, ignore
+            debug!("Payment already processed: {}", event.payment_hash);
+            return Ok(None);
         }
 
-        // Update the payment status
-        let updated_request = self
-            .storage
-            .update_payment_request_status(&payment_request.id, PaymentStatus::Paid)
+        // Check if expired
+        if Utc::now() > payment_request.expires_at {
+            debug!("Payment expired: {}", event.payment_hash);
+            return Ok(None);
+        }
+
+        // Verify payment is settled
+        if !provider
+            .check_invoice(&event.payment_hash)
+            .await
+            .map_err(PaymentError::from)?
+        {
+            debug!("Payment not yet settled: {}", event.payment_hash);
+            return Ok(None);
+        }
+
+        // Process the successful payment
+        self.process_successful_payment(&mut payment_request)
             .await?;
 
-        // Credit the user's account
-        self.storage
-            .update_user_credits(&updated_request.user_id, updated_request.credits as i32)
-            .await?;
-
-        info!(
-            "Processed Lightning payment for user {}: {} credits",
-            updated_request.user_id, updated_request.credits
-        );
-
-        Ok(Some(updated_request.user_id))
+        Ok(Some(payment_request.user_id.clone()))
     }
 
     /// Process a Coinbase webhook
@@ -330,60 +448,50 @@ impl PaymentService {
             .as_ref()
             .ok_or_else(|| PaymentError::InvalidPaymentMethod(PaymentMethod::Coinbase))?;
 
-        // Verify the webhook and parse the event
-        let event = match provider.verify_webhook(body, signature) {
-            Ok(event) => event,
-            Err(_) => return Ok(None), // Invalid webhook, ignore
-        };
-
-        // Check if this is a completed payment
-        if !provider.is_payment_completed(&event) {
-            return Ok(None); // Not a completed payment, ignore
-        }
+        // Verify and parse the webhook
+        let event = provider
+            .verify_webhook(body, signature)
+            .map_err(PaymentError::from)?;
 
         // Get the charge ID from the event
         let charge_id = provider.get_charge_id(&event);
 
-        // Look up the payment request by the charge ID
-        let payment_request = match self
+        // Get the payment request
+        let mut payment_request = match self
             .storage
             .get_payment_request_by_external_id(charge_id)
             .await
         {
             Ok(request) => request,
-            Err(_) => return Ok(None), // Payment not found, ignore
+            Err(StorageError::PaymentRequestNotFound) => {
+                debug!("Payment request not found for charge: {}", charge_id);
+                return Ok(None);
+            }
+            Err(e) => return Err(PaymentError::from(e)),
         };
 
-        // Check if the payment is already paid
+        // Check if already processed
         if payment_request.status == PaymentStatus::Paid {
-            return Ok(None); // Already processed, ignore
+            debug!("Payment already processed: {}", charge_id);
+            return Ok(None);
         }
 
-        // Update the payment status
-        let updated_request = self
-            .storage
-            .update_payment_request_status(&payment_request.id, PaymentStatus::Paid)
+        // Check if expired
+        if Utc::now() > payment_request.expires_at {
+            debug!("Payment expired: {}", charge_id);
+            return Ok(None);
+        }
+
+        // Check if payment is completed
+        if !provider.is_payment_completed(&event) {
+            debug!("Payment not completed: {}", charge_id);
+            return Ok(None);
+        }
+
+        // Process the successful payment
+        self.process_successful_payment(&mut payment_request)
             .await?;
 
-        // Credit the user's account
-        self.storage
-            .update_user_credits(&updated_request.user_id, updated_request.credits as i32)
-            .await?;
-
-        info!(
-            "Processed Coinbase payment for user {}: {} credits",
-            updated_request.user_id, updated_request.credits
-        );
-
-        Ok(Some(updated_request.user_id))
-    }
-
-    /// Find an offer by ID
-    fn get_offer(&self, offer_id: &str) -> Result<&Offer, PaymentError> {
-        self.config
-            .offers
-            .iter()
-            .find(|o| o.id == offer_id)
-            .ok_or_else(|| PaymentError::OfferNotFound(offer_id.to_string()))
+        Ok(Some(payment_request.user_id.clone()))
     }
 }
