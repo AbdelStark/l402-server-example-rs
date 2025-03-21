@@ -43,7 +43,7 @@ rm Cargo.toml.bak
 
 # Run CI checks
 echo "📋 Running CI checks..."
-./scripts/ci-check.sh
+./scripts/ci/ci-check.sh
 
 # Commit version change
 echo "📋 Committing version change..."

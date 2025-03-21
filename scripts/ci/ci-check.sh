@@ -6,9 +6,9 @@ set -e
 echo "🔍 Running CI checks locally..."
 
 # Check if Redis is available
-if [ -f ./scripts/check-redis.sh ]; then
+if [ -f ./scripts/ci/check-redis.sh ]; then
   echo "📋 Checking Redis availability..."
-  ./scripts/check-redis.sh
+  ./scripts/ci/check-redis.sh
 fi
 
 # Format check
