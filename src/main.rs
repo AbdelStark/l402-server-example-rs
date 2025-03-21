@@ -4,6 +4,7 @@ mod models;
 mod payments;
 mod services;
 mod storage;
+mod utils;
 
 use anyhow::Result;
 use config::Config;

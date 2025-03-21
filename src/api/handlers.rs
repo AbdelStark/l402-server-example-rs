@@ -54,6 +54,7 @@ pub async fn get_user_info(
 }
 
 /// Handler for initiating a payment
+#[axum::debug_handler]
 pub async fn initiate_payment(
     State(state): State<crate::api::routes::AppState>,
     Json(input): Json<PaymentRequestInput>,

@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::models::PaymentRequestDetails;
+use crate::utils::{self, ConversionError};
 use anyhow::Result;
 use lnbits_rs::{LNBitsClient, api::invoice::CreateInvoiceRequest};
 use reqwest::Client as HttpClient;
@@ -30,6 +31,10 @@ pub enum LightningError {
     /// LNBits client error
     #[error("LNBits error: {0}")]
     LNBitsError(String),
+
+    /// Currency conversion error
+    #[error("Currency conversion error: {0}")]
+    ConversionError(#[from] ConversionError),
 }
 
 /// Lightning payment provider using LNBits
@@ -112,8 +117,8 @@ impl LightningProvider {
             LightningError::ConfigError("LNBits client not configured".to_string())
         })?;
 
-        // Convert USD to satoshis
-        let amount_sats = self.convert_usd_to_sats(amount_usd).await?;
+        // Convert USD to satoshis using market rate
+        let amount_sats = utils::convert_usd_to_sats(amount_usd).await?;
 
         // Create invoice with 30 minute expiry (in seconds)
         let expiry = 30 * 60;
@@ -140,24 +145,6 @@ impl LightningProvider {
         Ok((invoice.payment_request, invoice.payment_hash))
     }
 
-    /// Convert USD to satoshis using current exchange rate
-    async fn convert_usd_to_sats(&self, amount_usd: f64) -> Result<u64, LightningError> {
-        // For simplicity, we'll use a fixed exchange rate
-        // In a production environment, you'd call an API to get the current rate
-
-        // Example: Assume 1 BTC = $50,000 USD
-        // Then 1 sat = $0.0000005 USD (1/100,000,000 of $50,000)
-        // So $1 USD = 2,000,000 sats
-
-        const SATS_PER_USD: f64 = 2_000_000.0;
-
-        // Convert to satoshis (rounding up to nearest sat)
-        let amount_sats = (amount_usd * SATS_PER_USD).ceil() as u64;
-
-        debug!("Converted ${} USD to {} sats", amount_usd, amount_sats);
-        Ok(amount_sats)
-    }
-
     /// Check if a payment has been settled
     pub async fn check_invoice(&self, payment_hash: &str) -> Result<bool, LightningError> {
         // Get the LNBits client
@@ -177,7 +164,7 @@ impl LightningProvider {
     pub fn verify_webhook(
         &self,
         body: &[u8],
-        signature: &str,
+        _signature: &str,
     ) -> Result<WebhookEvent, LightningError> {
         // For simplicity, this implementation doesn't verify signatures
         // In a production environment, you should verify using your LNBits webhook key

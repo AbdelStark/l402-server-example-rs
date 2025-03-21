@@ -1,11 +1,11 @@
 use crate::storage::StorageError;
 use axum::{
-    async_trait,
     extract::{FromRequestParts, Request, State},
     http::{StatusCode, header, request::Parts},
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use axum::extract::FromRef;
 use tracing::{debug, error};
 
 /// Error when authentication fails
@@ -52,7 +52,6 @@ impl IntoResponse for AuthError {
 pub struct UserId(pub String);
 
 /// Extract the user ID from the Authorization header
-#[async_trait]
 impl<S> FromRequestParts<S> for UserId
 where
     S: Send + Sync,
