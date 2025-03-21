@@ -5,7 +5,6 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use axum::extract::FromRef;
 use tracing::{debug, error};
 
 /// Error when authentication fails

@@ -53,7 +53,7 @@ static HTTP_CLIENT: Lazy<Client> = Lazy::new(Client::new);
 /// Convert USD amount to satoshis using current market rate from Kraken
 pub async fn convert_usd_to_sats(amount_usd: f64) -> Result<u64, ConversionError> {
     let cache_duration = Duration::seconds(600); // 10 minutes
-    
+
     // We need to check if update is needed and get the current value in separate blocks
     // to avoid holding the mutex across .await points (which would make the future !Send)
     let needs_update = {

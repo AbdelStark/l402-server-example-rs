@@ -85,18 +85,7 @@ impl LightningProvider {
                 }
             }
         } else {
-            // Check for legacy LND config as fallback
-            if config.lnd_rest_endpoint.is_none() {
-                return Err(LightningError::ConfigError(
-                    "Neither LNBits nor LND configuration provided".to_string(),
-                ));
-            }
-
-            // Using legacy LND client (not supported in this implementation)
-            error!("Legacy LND REST API no longer supported - please use LNBits");
-            return Err(LightningError::ConfigError(
-                "Legacy LND REST API no longer supported - please use LNBits".to_string(),
-            ));
+            None
         };
 
         Ok(Self {

@@ -102,7 +102,7 @@ fi
 
 # Step 4: Try to access the API with no credits (should get 402)
 echo -e "${BLUE}Step 5: Trying to access API with no credits...${NC}"
-RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: Bearer $AUTH_TOKEN" "$BASE_URL/latest-block")
+RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: Bearer $AUTH_TOKEN" "$BASE_URL/block")
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 

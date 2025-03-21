@@ -2,6 +2,7 @@ use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::sync::Arc;
+use tracing::debug;
 
 /// Represents a credit purchase offer
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,12 +40,6 @@ pub struct Config {
     pub lnbits_invoice_read_key: Option<String>,
     /// LNBits webhook verification key (if using LNBits)
     pub lnbits_webhook_key: Option<String>,
-    /// Legacy: Lightning node REST endpoint (if applicable)
-    pub lnd_rest_endpoint: Option<String>,
-    /// Legacy: LND macaroon in hex format (if applicable)
-    pub lnd_macaroon_hex: Option<String>,
-    /// Legacy: Path to LND TLS certificate (if applicable)
-    pub lnd_cert_path: Option<String>,
     /// Whether Coinbase payments are enabled
     pub coinbase_enabled: bool,
     /// Coinbase Commerce API key (if applicable)
@@ -89,37 +84,74 @@ impl Config {
             .expect("Failed to parse OFFERS_JSON environment variable");
 
         // Get configuration from environment
-        let host = env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
-        let port = env::var("PORT")
-            .unwrap_or_else(|_| "8080".to_string())
-            .parse()
-            .expect("PORT must be a number");
-        let redis_url =
-            env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
+        let host = env::var("HOST").unwrap_or_else(|_| {
+            debug!("HOST not found in environment, using default");
+            "127.0.0.1".to_string()
+        });
+
+        let port = match env::var("PORT") {
+            Ok(val) => {
+                debug!("Found PORT in environment: {}", val);
+                val.parse().expect("PORT must be a number")
+            }
+            Err(_) => {
+                debug!("PORT not found in environment, using default: 8080");
+                8080
+            }
+        };
+
+        let redis_url = env::var("REDIS_URL").unwrap_or_else(|_| {
+            debug!("REDIS_URL not found in environment, using default");
+            "redis://localhost:6379".to_string()
+        });
+        debug!("REDIS_URL: {}", redis_url);
 
         let lightning_enabled = env::var("LIGHTNING_ENABLED")
-            .unwrap_or_else(|_| "true".to_string())
-            .parse()
-            .unwrap_or(true);
+            .map(|val| {
+                debug!("Found LIGHTNING_ENABLED in environment: {}", val);
+                val.parse().unwrap_or(true)
+            })
+            .unwrap_or_else(|_| {
+                debug!("LIGHTNING_ENABLED not found in environment, using default: true");
+                true
+            });
 
         // LNBits configuration
         let lnbits_url = env::var("LNBITS_URL").ok();
+        if let Some(url) = &lnbits_url {
+            debug!("Found LNBITS_URL: {}", url);
+        }
         let lnbits_admin_key = env::var("LNBITS_ADMIN_KEY").ok();
+        if lnbits_admin_key.is_some() {
+            debug!("Found LNBITS_ADMIN_KEY");
+        }
         let lnbits_invoice_read_key = env::var("LNBITS_INVOICE_READ_KEY").ok();
+        if lnbits_invoice_read_key.is_some() {
+            debug!("Found LNBITS_INVOICE_READ_KEY");
+        }
         let lnbits_webhook_key = env::var("LNBITS_WEBHOOK_KEY").ok();
-
-        // Legacy LND configuration - kept for backward compatibility
-        let lnd_rest_endpoint = env::var("LND_REST_ENDPOINT").ok();
-        let lnd_macaroon_hex = env::var("LND_MACAROON_HEX").ok();
-        let lnd_cert_path = env::var("LND_CERT_PATH").ok();
+        if lnbits_webhook_key.is_some() {
+            debug!("Found LNBITS_WEBHOOK_KEY");
+        }
 
         let coinbase_enabled = env::var("COINBASE_ENABLED")
-            .unwrap_or_else(|_| "true".to_string())
-            .parse()
-            .unwrap_or(true);
+            .map(|val| {
+                debug!("Found COINBASE_ENABLED in environment: {}", val);
+                val.parse().unwrap_or(true)
+            })
+            .unwrap_or_else(|_| {
+                debug!("COINBASE_ENABLED not found in environment, using default: true");
+                true
+            });
 
         let coinbase_api_key = env::var("COINBASE_API_KEY").ok();
+        if coinbase_api_key.is_some() {
+            debug!("Found COINBASE_API_KEY");
+        }
         let coinbase_webhook_secret = env::var("COINBASE_WEBHOOK_SECRET").ok();
+        if coinbase_webhook_secret.is_some() {
+            debug!("Found COINBASE_WEBHOOK_SECRET");
+        }
 
         Self {
             host,
@@ -130,9 +162,6 @@ impl Config {
             lnbits_admin_key,
             lnbits_invoice_read_key,
             lnbits_webhook_key,
-            lnd_rest_endpoint,
-            lnd_macaroon_hex,
-            lnd_cert_path,
             coinbase_enabled,
             coinbase_api_key,
             coinbase_webhook_secret,
