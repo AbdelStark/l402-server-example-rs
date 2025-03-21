@@ -107,7 +107,7 @@ impl Config {
         let lnbits_admin_key = env::var("LNBITS_ADMIN_KEY").ok();
         let lnbits_invoice_read_key = env::var("LNBITS_INVOICE_READ_KEY").ok();
         let lnbits_webhook_key = env::var("LNBITS_WEBHOOK_KEY").ok();
-        
+
         // Legacy LND configuration - kept for backward compatibility
         let lnd_rest_endpoint = env::var("LND_REST_ENDPOINT").ok();
         let lnd_macaroon_hex = env::var("LND_MACAROON_HEX").ok();

@@ -48,4 +48,4 @@ hex = "0.4"
 dotenv = "0.15"
 
 # Lightning Network
-lnbits-rs = "0.3.1"
+lnbits-rs = "0.4.0"

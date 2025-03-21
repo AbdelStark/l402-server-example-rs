@@ -12,7 +12,7 @@ use coinbase::CoinbaseProvider;
 use lightning::LightningProvider;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 /// Errors that can occur in payment processing
 #[derive(Debug, Error)]
@@ -247,17 +247,20 @@ impl PaymentService {
                 return Ok(None);
             }
         };
-        
+
         // Check if payment is actually settled
         if !event.payment_status {
             // Event doesn't indicate a completed payment
-            debug!("Ignoring webhook for non-paid invoice: {}", event.payment_hash);
+            debug!(
+                "Ignoring webhook for non-paid invoice: {}",
+                event.payment_hash
+            );
             return Ok(None);
         }
 
         // Get the payment hash from the webhook data
         let payment_hash = &event.payment_hash;
-        
+
         // Additionally verify the payment status directly (extra safety check)
         let is_paid = match provider.check_invoice(payment_hash).await {
             Ok(paid) => paid,
@@ -267,7 +270,7 @@ impl PaymentService {
                 event.payment_status
             }
         };
-        
+
         if !is_paid {
             debug!("Payment verification failed for hash: {}", payment_hash);
             return Ok(None);
