@@ -141,7 +141,7 @@ echo
 
 # Step 6: Test API access with new credits
 echo -e "${BLUE}Testing API access with new credits...${NC}"
-API_RESPONSE=$(curl -s -H "Authorization: Bearer $USER_ID" "$BASE_URL/latest-block")
+API_RESPONSE=$(curl -s -H "Authorization: Bearer $USER_ID" "$BASE_URL/block")
 echo -e "${GREEN}✓ API access test${NC}"
 echo -e "  Response: $(echo $API_RESPONSE | jq -c '.' | head -1)"
 echo
