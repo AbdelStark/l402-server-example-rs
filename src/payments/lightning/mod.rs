@@ -1,8 +1,8 @@
 use crate::config::Config;
 use crate::models::PaymentRequestDetails;
+use crate::payments::lnbits::{CreateInvoiceRequest, LNBitsClient, LNBitsError};
 use crate::utils::{self, ConversionError};
 use anyhow::Result;
-use lnbits_rs::{LNBitsClient, api::invoice::CreateInvoiceRequest};
 use reqwest::Client as HttpClient;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -30,7 +30,7 @@ pub enum LightningError {
 
     /// LNBits client error
     #[error("LNBits error: {0}")]
-    LNBitsError(String),
+    LNBitsError(#[from] LNBitsError),
 
     /// Currency conversion error
     #[error("Currency conversion error: {0}")]
@@ -81,7 +81,7 @@ impl LightningProvider {
                 }
                 Err(err) => {
                     error!("Failed to initialize LNBits client: {}", err);
-                    return Err(LightningError::LNBitsError(err.to_string()));
+                    return Err(LightningError::LNBitsError(err));
                 }
             }
         } else {
@@ -106,8 +106,12 @@ impl LightningProvider {
             LightningError::ConfigError("LNBits client not configured".to_string())
         })?;
 
+        info!("Invoice requested for {} USD", amount_usd);
+
         // Convert USD to satoshis using market rate
         let amount_sats = utils::convert_usd_to_sats(amount_usd).await?;
+
+        info!("Converted amount to {} sats", amount_sats);
 
         // Create invoice with 30 minute expiry (in seconds)
         let expiry = 30 * 60;
@@ -118,20 +122,15 @@ impl LightningProvider {
             unit: "sat".to_string(),
             expiry: Some(expiry),
             webhook: None,
-            internal: None,
+            internal: false,
             out: false,
         };
 
+        info!("Invoice request: {:?}", invoice_request);
+
         // Create the invoice
-        let invoice = client
-            .create_invoice(&invoice_request)
-            .await
-            .map_err(|e| LightningError::ApiError(format!("Failed to create invoice: {}", e)))?;
-
-        info!("Created Lightning invoice for {} sats", amount_sats);
-
-        // Return the payment request (BOLT11 invoice) and payment hash
-        Ok((invoice.payment_request, invoice.payment_hash))
+        let invoice = client.create_invoice(&invoice_request).await?;
+        Ok((invoice.bolt11, invoice.payment_hash))
     }
 
     /// Check if a payment has been settled
@@ -142,11 +141,7 @@ impl LightningProvider {
         })?;
 
         // Check the payment status
-        let invoice_paid = client.is_invoice_paid(payment_hash).await.map_err(|e| {
-            LightningError::ApiError(format!("Failed to check invoice status: {}", e))
-        })?;
-
-        Ok(invoice_paid)
+        Ok(client.is_invoice_paid(payment_hash).await?)
     }
 
     /// Verify a webhook payload from Lightning provider

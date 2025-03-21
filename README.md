@@ -1,6 +1,6 @@
 # L402 Server Example (Rust)
 
-A Rust implementation of an API paywalled with the L402 protocol. This project demonstrates how to implement a server that charges per API call using Lightning Network and Coinbase Commerce payments for Bitcoin blockchain data.
+A Rust implementation of an API paywalled with the [L402 protocol](https://www.l402.org/). This project demonstrates how to implement a server that charges per API call using Lightning Network or other payment methods to get access to paywalled resources.
 
 ## Features
 
@@ -9,7 +9,6 @@ A Rust implementation of an API paywalled with the L402 protocol. This project d
 - Bitcoin blockchain data API endpoint
 - Payment processing via:
   - Lightning Network
-  - Coinbase Commerce
 - Webhook handling for payment confirmations
 - Redis-based data storage and caching
 
@@ -43,7 +42,7 @@ Authorization: Bearer <user_id>
 
 Configuration is done via environment variables or a `.env` file:
 
-```
+```text
 # Server configuration
 PORT=8080
 HOST=127.0.0.1
@@ -65,7 +64,7 @@ COINBASE_ENABLED=true
 # COINBASE_WEBHOOK_SECRET=your_webhook_secret
 
 # Credit offers
-OFFERS_JSON=[{"id":"offer1","title":"1 Credit Package","description":"Purchase 1 credit for API access","credits":1,"amount":0.01,"currency":"USD"},{"id":"offer2","title":"5 Credits Package","description":"Purchase 5 credits for API access","credits":5,"amount":0.05,"currency":"USD"}]
+OFFERS_JSON='{"id":"offer1","title":"1 Credit Package","description":"Purchase 1 credit for API access","credits":1,"amount":0.01,"currency":"USD"},{"id":"offer2","title":"5 Credits Package","description":"Purchase 5 credits for API access","credits":5,"amount":0.05,"currency":"USD"}]'
 
 # Logging configuration
 RUST_LOG=info,l402_server_example_rs=debug
@@ -92,11 +91,13 @@ This will start the server and a Redis instance.
 To run the server locally:
 
 1. Start a Redis server:
+
    ```bash
    redis-server
    ```
 
 2. Build and run the application:
+
    ```bash
    cargo build
    cargo run
@@ -111,6 +112,7 @@ curl http://localhost:8080/signup
 ```
 
 Response:
+
 ```json
 {
   "id": "57d102ff-7188-4eff-b868-2d46d649aafe",
@@ -127,6 +129,7 @@ curl -H "Authorization: Bearer 57d102ff-7188-4eff-b868-2d46d649aafe" http://loca
 ```
 
 Response:
+
 ```json
 {
   "id": "57d102ff-7188-4eff-b868-2d46d649aafe",
@@ -143,6 +146,7 @@ curl -H "Authorization: Bearer 57d102ff-7188-4eff-b868-2d46d649aafe" http://loca
 ```
 
 If the user has credits, they will receive the latest Bitcoin block hash:
+
 ```json
 {
   "hash": "000000000000000000007b05bde2eb0be32cc10ec811cb636728e647e7cc0c63",
@@ -151,6 +155,7 @@ If the user has credits, they will receive the latest Bitcoin block hash:
 ```
 
 If the user is out of credits, they will receive a 402 Payment Required response with available offers:
+
 ```json
 {
   "expiry": "2024-03-20T04:45:32Z",
@@ -186,6 +191,7 @@ curl -X POST -H "Content-Type: application/json" \
 ```
 
 Response for Lightning:
+
 ```json
 {
   "lightning_invoice": "lnbc...",
@@ -195,6 +201,7 @@ Response for Lightning:
 ```
 
 Response for Coinbase:
+
 ```json
 {
   "checkout_url": "https://commerce.coinbase.com/charges/...",
@@ -214,11 +221,11 @@ This project demonstrates the L402 payment protocol flow:
 2. The user makes a request to `/block` to get Bitcoin block data
 3. After using their credit, the next request returns a 402 Payment Required response
 4. The response includes available payment options (offers)
-5. The user selects an offer and initiates a payment via Lightning or Coinbase
+5. The user selects an offer and initiates a payment via Lightning or other payment methods
 6. Once payment is confirmed (via webhook), credits are added to the user's account
 7. The user can now make another request to `/block` using their new credits
 
-This implementation shows how micropayments can be used to monetize API access with cryptocurrency, making it suitable for applications where users pay small amounts for specific pieces of data.
+This implementation shows how micropayments can be used to monetize API access with Bitcoin, making it suitable for applications where users pay small amounts for specific pieces of data.
 
 ## Development
 
@@ -262,18 +269,22 @@ This project uses GitHub Actions for continuous integration and deployment:
 On every push and pull request to the main branch, the CI workflow runs:
 
 1. **Code Checks**:
+
    - Code formatting verification
    - Clippy linting
    - Compilation check
 
 2. **Tests**:
+
    - Runs all unit and integration tests
    - Generates code coverage metrics
 
 3. **Security Audit**:
+
    - Scans dependencies for known vulnerabilities with cargo-audit
 
 4. **Build**:
+
    - Builds the release binary
    - Uploads the binary as an artifact
 
@@ -285,6 +296,7 @@ On every push and pull request to the main branch, the CI workflow runs:
 When a new release is published or triggered manually:
 
 1. **Release Build**:
+
    - Builds the release binary
    - Creates a distributable archive with documentation
    - Uploads the archive as a release asset
@@ -295,4 +307,18 @@ When a new release is published or triggered manually:
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+Built with 🧡 by [@AbdelStark](https://github.com/AbdelStark)
+
+Feel free to follow me on Nostr if you’d like, using my public key:
+
+```text
+npub1hr6v96g0phtxwys4x0tm3khawuuykz6s28uzwtj5j0zc7lunu99snw2e29
+```
+
+Or just **scan this QR code** to find me:
+
+![Nostr Public Key QR Code](https://hackmd.io/_uploads/SkAvwlYYC.png)

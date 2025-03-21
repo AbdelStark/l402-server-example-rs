@@ -1,5 +1,6 @@
 pub mod coinbase;
 pub mod lightning;
+pub mod lnbits;
 
 use crate::config::{Config, Offer};
 use crate::models::{
@@ -13,6 +14,9 @@ use lightning::LightningProvider;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, error, info};
+
+// Re-export LNBits types
+pub use lnbits::{LNBitsClient, LNBitsError};
 
 /// Errors that can occur in payment processing
 #[derive(Debug, Error)]

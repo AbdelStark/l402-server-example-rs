@@ -3,7 +3,7 @@ name = "l402-server-example-rs"
 version = "0.1.0"
 edition = "2024"
 description = "A Rust implementation of the L402 payment system for API paywalls"
-authors = ["Claude <noreply@anthropic.com>"]
+authors = ["Abdel <@AbdelStark>"]
 
 [dependencies]
 # Web framework
@@ -46,9 +46,6 @@ hex = "0.4"
 
 # Environment variables
 dotenv = "0.15"
-
-# Lightning Network
-lnbits-rs = "0.4.0"
 
 # Static initialization
 once_cell = "1.19"
