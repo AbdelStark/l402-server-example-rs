@@ -45,6 +45,7 @@ pub enum PaymentError {
 
     /// Offer not found
     #[error("Offer not found: {0}")]
+    #[allow(dead_code)]
     OfferNotFound(String),
 
     /// User not found
@@ -59,14 +60,17 @@ pub enum PaymentError {
 
     /// Payment already processed
     #[error("Payment already processed: {0}")]
+    #[allow(dead_code)]
     AlreadyProcessed(String),
 
     /// Payment expired
     #[error("Payment expired: {0}")]
+    #[allow(dead_code)]
     PaymentExpired(String),
 
     /// Payment not found
     #[error("Payment not found: {0}")]
+    #[allow(dead_code)]
     PaymentNotFound(String),
 
     /// Conversion error
