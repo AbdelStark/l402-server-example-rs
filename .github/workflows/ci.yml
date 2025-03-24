@@ -162,7 +162,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: audit
-          args: --deny
+          args: --deny warnings
 
   build:
     name: Build
