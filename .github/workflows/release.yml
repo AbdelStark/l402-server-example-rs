@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g. v1.0.0)'
+        description: "Tag to release (e.g. v1.0.0)"
         required: true
 
 env:
@@ -21,14 +21,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
-      
+
       - name: Set up cargo cache
         uses: actions/cache@v3
         with:
@@ -40,13 +40,13 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-      
+
       - name: Build release binary
         uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release
-      
+
       - name: Create release archive
         run: |
           mkdir -p ./release
@@ -57,14 +57,14 @@ jobs:
           cp -r .env.example ./release/.env.example
           cd release
           tar czf ../l402-server-example-rs-linux-x64.tar.gz *
-      
+
       - name: Upload release assets
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: release-binary
           path: l402-server-example-rs-linux-x64.tar.gz
           retention-days: 7
-      
+
       - name: Upload binary to release
         if: github.event_name == 'release'
         uses: actions/upload-release-asset@v1
