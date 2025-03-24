@@ -1,6 +1,15 @@
-# L402 Server Example (Rust)
+<div align="center">
+
+<a href="https://github.com/AbdelStark/l402-server-example-rs/actions/workflows/ci.yml"><img alt="GitHub Workflow Status" src="https://img.shields.io/github/actions/workflow/status/AbdelStark/l402-server-example-rs/ci.yml?style=for-the-badge" height=30></a>
+<a href="https://bitcoin.org/"> <img alt="Bitcoin" src="https://img.shields.io/badge/Bitcoin-000?style=for-the-badge&logo=bitcoin&logoColor=white" height=30></a>
+
+</div>
+
+# L402 Server Example in Rust
 
 A Rust implementation of an API paywalled with the [L402 protocol](https://www.l402.org/). This project demonstrates how to implement a server that charges per API call using Lightning Network or other payment methods to get access to paywalled resources.
+
+[Live Demo web app](https://l402.starknetonbitcoin.com/) - [Demo frontend repo](https://github.com/AbdelStark/l402-shield)
 
 ## Features
 
@@ -18,6 +27,7 @@ A Rust implementation of an API paywalled with the [L402 protocol](https://www.l
 - **GET /info** - Get current user info (requires authentication)
 - **GET /block** - Get the latest Bitcoin block hash, costs 1 credit (requires authentication)
 - **POST /l402/payment-request** - Initiate a payment to purchase more credits
+- **POST /credits-payment-options** - Get available credit purchase options
 - **POST /webhook/lightning** - Lightning payment webhooks
 - **POST /webhook/coinbase** - Coinbase payment webhooks
 
