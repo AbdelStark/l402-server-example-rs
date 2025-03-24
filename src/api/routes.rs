@@ -44,7 +44,10 @@ pub fn create_router(
     let protected_routes = Router::new()
         .route("/info", get(handlers::get_user_info))
         .route("/block", get(handlers::get_latest_block))
-        .route("/credits-payment-options", get(handlers::get_payment_options));
+        .route(
+            "/credits-payment-options",
+            get(handlers::get_payment_options),
+        );
 
     let state = AppState {
         config,
