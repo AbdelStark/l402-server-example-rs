@@ -50,6 +50,9 @@ HOST=127.0.0.1
 # Redis configuration
 REDIS_URL=redis://localhost:6379
 
+# Payment request URL (optional, defaults to http://HOST:PORT/l402/payment-request)
+# PAYMENT_REQUEST_URL=https://your-domain.com/l402/payment-request
+
 # Lightning payment configuration
 LIGHTNING_ENABLED=true
 # LNBits configuration (preferred)
@@ -313,7 +316,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 Built with 🧡 by [@AbdelStark](https://github.com/AbdelStark)
 
-Feel free to follow me on Nostr if you’d like, using my public key:
+Feel free to follow me on Nostr if you'd like, using my public key:
 
 ```text
 npub1hr6v96g0phtxwys4x0tm3khawuuykz6s28uzwtj5j0zc7lunu99snw2e29

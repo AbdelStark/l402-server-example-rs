@@ -30,6 +30,8 @@ pub struct Config {
     pub port: u16,
     /// Redis connection URL
     pub redis_url: String,
+    /// URL for payment requests
+    pub payment_request_url: Option<String>,
     /// Whether Lightning payments are enabled
     pub lightning_enabled: bool,
     /// LNBits URL (if using LNBits)
@@ -106,6 +108,15 @@ impl Config {
         });
         debug!("REDIS_URL: {}", redis_url);
 
+        let payment_request_url = env::var("PAYMENT_REQUEST_URL").ok();
+        if let Some(url) = &payment_request_url {
+            debug!("Found PAYMENT_REQUEST_URL: {}", url);
+        } else {
+            debug!(
+                "PAYMENT_REQUEST_URL not found in environment, will use default based on HOST:PORT"
+            );
+        }
+
         let lightning_enabled = env::var("LIGHTNING_ENABLED")
             .map(|val| {
                 debug!("Found LIGHTNING_ENABLED in environment: {}", val);
@@ -157,6 +168,7 @@ impl Config {
             host,
             port,
             redis_url,
+            payment_request_url,
             lightning_enabled,
             lnbits_url,
             lnbits_admin_key,
@@ -172,5 +184,12 @@ impl Config {
     /// Create a shared reference to this configuration
     pub fn into_arc(self) -> Arc<Self> {
         Arc::new(self)
+    }
+
+    /// Get the payment request URL, or construct a default based on host and port
+    pub fn get_payment_request_url(&self) -> String {
+        self.payment_request_url
+            .clone()
+            .unwrap_or_else(|| format!("http://{}:{}/l402/payment-request", self.host, self.port))
     }
 }

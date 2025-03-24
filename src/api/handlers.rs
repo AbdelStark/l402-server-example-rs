@@ -164,10 +164,7 @@ pub async fn get_latest_block(
             expiry,
             offers: config.offers.clone(),
             payment_context_token: user_id,
-            payment_request_url: format!(
-                "http://{}:{}/l402/payment-request",
-                config.host, config.port
-            ),
+            payment_request_url: config.get_payment_request_url(),
         };
 
         return (StatusCode::PAYMENT_REQUIRED, Json(payment_required)).into_response();
@@ -242,7 +239,7 @@ pub async fn get_payment_options(
 ) -> impl IntoResponse {
     let config = &state.config;
     let storage = &state.storage;
-    
+
     // Verify the user exists
     match storage.get_user(&user_id).await {
         Ok(_) => {
@@ -252,21 +249,16 @@ pub async fn get_payment_options(
                 expiry,
                 offers: config.offers.clone(),
                 payment_context_token: user_id,
-                payment_request_url: format!(
-                    "http://{}:{}/l402/payment-request",
-                    config.host, config.port
-                ),
+                payment_request_url: config.get_payment_request_url(),
             };
 
             (StatusCode::OK, Json(payment_options)).into_response()
-        },
-        Err(StorageError::UserNotFound) => {
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({"error": "User not found"})),
-            )
-                .into_response()
-        },
+        }
+        Err(StorageError::UserNotFound) => (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "User not found"})),
+        )
+            .into_response(),
         Err(e) => {
             error!("Error retrieving user: {}", e);
             (
