@@ -11,6 +11,8 @@ A Rust implementation of an API paywalled with the [L402 protocol](https://www.l
 
 [Live Demo web app](https://l402.starknetonbitcoin.com/) - [Demo frontend repo](https://github.com/AbdelStark/l402-shield)
 
+This example Rust backend for L402 protocol is based on the [L402 protocol specification](https://www.l402.org/protocol) and is designed to be a simple, easy-to-understand reference for developers looking to implement L402 in their own projects, akin to the [L402 Python reference server](https://github.com/l402-protocol/l402-server-example).
+
 ## Features
 
 - User creation and management
